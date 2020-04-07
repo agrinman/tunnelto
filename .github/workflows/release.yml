@@ -38,8 +38,8 @@ jobs:
       - name: Upload Client Binary
         uses: actions/upload-artifact@v1
         with:
-          name: wormhole-${{ matrix.os }}.tar.gz
-          path: wormhole-${{ matrix.os }}.tar.gz
+          name: wormhole-${{ matrix.os }}
+          path: target/release/wormhole
 
   build_win:
     runs-on: windows-latest
@@ -76,24 +76,30 @@ jobs:
       - name: Download macOS
         uses: actions/download-artifact@v1
         with:
-          name: wormhole-macOS-latest.tar.gz
+          name: wormhole-macOS-latest
+          path: macOS/wormhole
 
       - name: Download ubuntu
         uses: actions/download-artifact@v1
         with:
-          name: wormhole-ubuntu-latest.tar.gz
+          name: wormhole-ubuntu-latest
+          path: linux/wormhole
 
       - name: Download windows
         uses: actions/download-artifact@v1
         with:
           name: wormhole-windows-latest.exe
+          path: windows/wormhole.exe
 
-      - name: Compress wubdiws
-        run: tar -czvf wormhole-windows-latest.tar.gz wormhole-windows-latest.exe
+      - name: Compress
+        run: |
+          tar -czvf wormhole-windows.tar.gz windows/wormhole.exe
+          tar -czvf wormhole-macOS.tar.gz macOS/wormhole
+          tar -czvf wormhole-linux.tar.gz linux/wormhole
 
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "wormhole-macOS-latest.tar.gz,wormhole-ubuntu-latest.tar.gz,wormhole-windows-latest.tar.gz"
+          artifacts: "wormhole-macOS.tar.gz,wormhole-linux.tar.gz,wormhole-windows.tar.gz"
           token: ${{ secrets.GITHUB_TOKEN }}
