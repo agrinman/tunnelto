@@ -77,22 +77,24 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: wormhole-macOS-latest
-          path: macOS/wormhole
+          path: macOS/
 
       - name: Download ubuntu
         uses: actions/download-artifact@v1
         with:
           name: wormhole-ubuntu-latest
-          path: linux/wormhole
+          path: linux/
 
       - name: Download windows
         uses: actions/download-artifact@v1
         with:
           name: wormhole-windows-latest.exe
-          path: windows/wormhole.exe
+          path: windows/
 
       - name: Compress
         run: |
+          chmod +x macOS/wormhole
+          chmod +x linux/wormhole
           tar -czvf wormhole-windows.tar.gz windows/wormhole.exe
           tar -czvf wormhole-macOS.tar.gz macOS/wormhole
           tar -czvf wormhole-linux.tar.gz linux/wormhole

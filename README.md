@@ -17,7 +17,7 @@ Written in Rust. Built completely with async-io on top of tokio.
 
 ```bash
 # with brew (macos)
-$ brew install tap/agrinman/wormhole
+### coming soon!
 
 # with cargo
 $ cargo install wormhole-tunnel
