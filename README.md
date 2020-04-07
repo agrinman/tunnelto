@@ -1,4 +1,4 @@
-![Build](https://github.com/agrinman/wormhole/workflows/Build/badge.svg)   ![@AlexGrinman](https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman)
+![Package Release](https://github.com/agrinman/wormhole/workflows/Package%20Release/badge.svg)   ![@AlexGrinman](https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman)
 # wormhole
 `wormhole` lets you expose your locally running web server via a public URL.
 Written in Rust. Built completely with async-io on top of tokio.
