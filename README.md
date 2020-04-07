@@ -1,11 +1,28 @@
-![Build and Release](https://github.com/agrinman/wormhole/workflows/Build%20and%20Release/badge.svg)   ![@AlexGrinman](https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman)
+![Build and Release](https://github.com/agrinman/wormhole/workflows/Build%20and%20Release/badge.svg)   ![Crates.io](https://img.shields.io/crates/v/wormhole-tunnel) ![@AlexGrinman](https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman)
+
+<p align="center">
+<img src="https://repository-images.githubusercontent.com/249120770/6208df00-7865-11ea-9134-cb78fe857eed" align="center" height="280px"/>
+</p>
+
 # wormhole
 `wormhole` lets you expose your locally running web server via a public URL.
 Written in Rust. Built completely with async-io on top of tokio.
 
-1. [Usage Instructions](#usage)
-2. [How does it work?](#how-does-it-work)
-3. [Self-hosting](#host-it-yourself)
+1. [Install Wormhole](#install)
+2. [Usage Instructions](#usage)
+3. [How does it work?](#how-does-it-work)
+4. [Self-hosting](#host-it-yourself)
+
+# Install
+
+```bash
+# with brew (macos)
+$ brew install tap/agrinman/wormhole
+
+# with cargo
+$ cargo install wormhole-tunnel
+```
+
 
 # Usage
 ```shell script
