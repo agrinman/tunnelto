@@ -105,7 +105,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./wormhole-macOS-latest.tar.gz
+          asset_path: wormhole-macOS-latest.tar.gz
           asset_name: wormhole-macOS-latest.tar.gz
           asset_content_type: application/gzip
 
@@ -115,7 +115,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./wormhole-ubuntu-latest.tar.gz
+          asset_path: wormhole-ubuntu-latest.tar.gz
           asset_name: wormhole-ubuntu-latest.tar.gz
           asset_content_type: application/gzip
 
@@ -125,6 +125,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./wormhole-windows-latest.exe
+          asset_path: wormhole-windows-latest.exe
           asset_name: wormhole-windows-latest.exe
           asset_content_type: application/vnd.microsoft.portable-executable
