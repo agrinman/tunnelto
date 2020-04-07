@@ -92,8 +92,7 @@ jobs:
         run: tar -czvf wormhole-windows-latest.tar.gz wormhole-windows-latest.exe
 
       - name: Create Release
-      - uses: actions/checkout@v1
-      - uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
           artifacts: "wormhole-macOS-latest.tar.gz,wormhole-ubuntu-latest.tar.gz,wormhole-windows-latest.tar.gz"
