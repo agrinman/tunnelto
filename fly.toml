@@ -1,0 +1,43 @@
+app = "blackhole"
+
+[[services]]
+  internal_port = 5000
+  protocol = "tcp"
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = "10001"
+
+  [[services.http_checks]]
+    interval = 10000
+    method = "get"
+    path = "/health_check"
+    protocol = "http"
+    timeout = 2000
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = "80"
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = "443"
+
+  [[services.http_checks]]
+    interval = 10000
+    method = "get"
+    path = "/0xDEADBEEF_HEALTH_CHECK"
+    protocol = "http"
+    timeout = 2000
