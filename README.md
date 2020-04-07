@@ -24,6 +24,8 @@ $ cargo install wormhole-tunnel
 ```
 
 
+Or **Download a release for your target OS here**: [wormhole/releases](https://github.com/agrinman/wormhole/releases)
+
 # Usage
 ```shell script
 # Store the authentication key
