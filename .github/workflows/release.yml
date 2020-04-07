@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Client
+        run: cargo build --release --bin wormhole --verbose
+      - name: Compress
+        run: tar -czvf wormhole-${{ matrix.os }}.tar.gz target/release/wormhole
+      - name: Upload Client Binary
+        uses: actions/upload-artifact@v1
+        with:
+          name: wormhole-${{ matrix.os }}.tar.gz
+          path: wormhole-${{ matrix.os }}.tar.gz
+
+    build_win:
+      runs-on: windows-latest
+      steps:
+      - uses: actions/checkout@v2
+      - name: Build Client
+        run: cargo build --release --bin wormhole --verbose
+      - name: Upload Client Binary
+        uses: actions/upload-artifact@v1
+        with:
+          name: wormhole-windows-latest.exe
+          path: target/release/wormhole.exe
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS
+        uses: actions/download-artifact@v1
+        with:
+          name: wormhole-macOS-latest.tar.gz
+
+      - name: Download ubuntu
+        uses: actions/download-artifact@v1
+        with:
+          name: wormhole-ubuntu-latest.tar.gz
+
+      - name: Download windows
+        uses: actions/download-artifact@v1
+        with:
+          name: wormhole-windows-latest.exe
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload macOS
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./wormhole-macOS-latest.tar.gz
+          asset_name: wormhole-macOS-latest.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload linux
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./wormhole-ubuntu-latest.tar.gz
+          asset_name: wormhole-ubuntu-latest.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload windows
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./wormhole-windows-latest.exe
+          asset_name: wormhole-windows-latest.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
