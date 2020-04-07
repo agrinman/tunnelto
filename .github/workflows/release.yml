@@ -88,43 +88,13 @@ jobs:
         with:
           name: wormhole-windows-latest.exe
 
+      - name: Compress wubdiws
+        run: tar -czvf wormhole-windows-latest.tar.gz wormhole-windows-latest.exe
+
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v1
+      - uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-      - name: Upload macOS
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: wormhole-macOS-latest.tar.gz
-          asset_name: wormhole-macOS-latest.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload linux
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: wormhole-ubuntu-latest.tar.gz
-          asset_name: wormhole-ubuntu-latest.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload windows
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: wormhole-windows-latest.exe
-          asset_name: wormhole-windows-latest.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
+          allowUpdates: true
+          artifacts: "wormhole-macOS-latest.tar.gz,wormhole-ubuntu-latest.tar.gz,wormhole-windows-latest.tar.gz"
+          token: ${{ secrets.GITHUB_TOKEN }}
