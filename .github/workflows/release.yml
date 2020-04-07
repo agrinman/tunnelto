@@ -25,17 +25,17 @@ jobs:
           name: wormhole-${{ matrix.os }}.tar.gz
           path: wormhole-${{ matrix.os }}.tar.gz
 
-    build_win:
-      runs-on: windows-latest
-      steps:
-      - uses: actions/checkout@v2
-      - name: Build Client
-        run: cargo build --release --bin wormhole --verbose
-      - name: Upload Client Binary
-        uses: actions/upload-artifact@v1
-        with:
-          name: wormhole-windows-latest.exe
-          path: target/release/wormhole.exe
+  build_win:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build Client
+      run: cargo build --release --bin wormhole --verbose
+    - name: Upload Client Binary
+      uses: actions/upload-artifact@v1
+      with:
+        name: wormhole-windows-latest.exe
+        path: target/release/wormhole.exe
 
   publish:
     needs: [build]
