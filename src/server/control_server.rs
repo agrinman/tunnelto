@@ -23,12 +23,14 @@ async fn handle_new_connection(websocket: WebSocket) {
 
     let  (sink, stream) = websocket.split();
 
+    let client_clone = client.clone();
+
     tokio::spawn(async move {
-        tunnel_client(client, sink, rx).await;
+        tunnel_client(client_clone, sink, rx).await;
     });
 
     tokio::spawn(async move {
-        process_client_messages(stream).await;
+        process_client_messages(client, stream).await;
     });
 }
 
@@ -107,26 +109,39 @@ pub async fn send_client_stream_init(mut stream: ActiveStream) {
 }
 
 /// Process client control messages
-async fn process_client_messages(mut client_conn: SplitStream<WebSocket>) {
+async fn process_client_messages(client: ConnectedClient, mut client_conn: SplitStream<WebSocket>) {
     loop {
         let result = client_conn.next().await;
 
         let message = match result {
             Some(Ok(msg)) if !msg.as_bytes().is_empty() => msg,
             _ => {
-                eprintln!("ending recv on websocket stream");
+                info!("goodbye client: {:?}", &client.id);
+                Connections::remove(&client);
                 return
             },
         };
 
-        let (stream_id, data) = match ControlPacket::deserialize(message.as_bytes()) {
-            Ok(ControlPacket::Data(stream_id, data)) => (stream_id, data),
-            Ok(ControlPacket::Init(_)) => {
-                eprintln!("invalid protocol control::init message");
-                continue
-            }
+        let packet = match ControlPacket::deserialize(message.as_bytes()) {
+            Ok(packet) => packet,
             Err(e) => {
                 eprintln!("invalid data packet: {:?}", e);
+                continue
+            }
+        };
+
+        let (stream_id, message) = match packet {
+            ControlPacket::Data(stream_id, data) => {
+                let str_contents  = std::str::from_utf8(&data).unwrap_or("<non-utf8 response>");
+                info!("forwarding to stream[id={}]: {:?}", &stream_id.to_string(), str_contents);
+                (stream_id, StreamMessage::Data(data))
+            },
+            ControlPacket::Refused(stream_id) => {
+                log::info!("tunnel says: refused");
+                (stream_id, StreamMessage::TunnelRefused)
+            }
+            ControlPacket::Init(_) => {
+                error!("invalid protocol control::init message");
                 continue
             }
         };
@@ -134,10 +149,9 @@ async fn process_client_messages(mut client_conn: SplitStream<WebSocket>) {
         let stream = ACTIVE_STREAMS.read().unwrap().get(&stream_id).cloned();
 
         if let Some(mut stream) = stream {
-            let str_contents  = std::str::from_utf8(&data).unwrap_or("<non-utf8 response>");
-            eprintln!("sending to stream[id={}]: {:?}", &stream_id.to_string(), str_contents);
-
-            stream.tx.send(StreamMessage::Data(data)).await.expect("failed to send data to server from websocket");
+            let _ = stream.tx.send(message).await.map_err(|e| {
+                log::error!("Failed to send to stream tx: {:?}", e);
+            });
         }
     }
 }
@@ -154,7 +168,7 @@ async fn tunnel_client(client: ConnectedClient, mut sink: SplitSink<WebSocket, M
                 }
             },
             None => {
-                eprintln!("ending client tunnel");
+                info!("ending client tunnel");
                 return
             },
         };

@@ -23,5 +23,6 @@ use super::*;
 #[derive(Debug, Clone)]
 pub enum StreamMessage {
     Data(Vec<u8>),
+    TunnelRefused,
     NoClientTunnel
 }

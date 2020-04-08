@@ -14,10 +14,12 @@ use std::env;
 
 mod local;
 mod config;
+mod introspect;
 
 pub use wormhole::*;
 pub use config::*;
 
+use colour::*;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<Vec<u8>>>>>;
 
@@ -34,6 +36,8 @@ async fn main() {
         Ok(config) => config,
         Err(_) => return,
     };
+
+    e_green_ln!("Welcome to wormhole!\n{}\n", include_str!("../../wormhole_ascii.txt"));
 
     loop {
         let (restart_tx, mut restart_rx) = unbounded();
@@ -146,18 +150,21 @@ async fn connect_to_wormhole(config: &Config) -> WebSocketStream<MaybeTlsStream<
     websocket
 }
 
-async fn process_control_flow_message(config: &Config, tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let control_packet = ControlPacket::deserialize(&payload)?;
 
     match control_packet {
         ControlPacket::Init(stream_id) => {
             info!("stream[{:?}] -> init", stream_id.to_string());
         },
+        ControlPacket::Refused(_) => {
+            return Err("unexpected control packet".into())
+        }
         ControlPacket::Data(stream_id, data) => {
             info!("stream[{:?}] -> got data: {:?}", stream_id.to_string(), std::str::from_utf8(&data));
 
             if !ACTIVE_STREAMS.read().unwrap().contains_key(&stream_id) {
-                local::setup_new_stream(&config.local_port, tunnel_tx, stream_id.clone()).await;
+                local::setup_new_stream(&config.local_port, tunnel_tx.clone(), stream_id.clone()).await;
             }
 
             // find the right stream
@@ -165,10 +172,11 @@ async fn process_control_flow_message(config: &Config, tunnel_tx: UnboundedSende
 
             // forward data to it
             if let Some(mut tx) = active_stream {
-                tx.send(data).await.expect("failed to forward remote packets to local stream");
+                tx.send(data).await?;
                 info!("forwarded to local tcp ({})", stream_id.to_string());
             } else {
                 error!("got data but no stream to send it to.");
+                let _ = tunnel_tx.send(ControlPacket::Refused(stream_id)).await?;
             }
         },
     };

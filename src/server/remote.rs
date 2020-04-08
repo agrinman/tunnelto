@@ -85,6 +85,7 @@ fn validate_host_prefix(host: &str) -> Option<String> {
 const HTTP_REDIRECT_RESPONSE:&'static [u8] = b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://alexgr.in/\r\nContent-Length: 17\r\n\r\nhttps://alexgr.in";
 const HTTP_INVALID_HOST_RESPONSE:&'static [u8] = b"HTTP/1.1 400\r\nContent-Length: 23\r\n\r\nError: Invalid Hostname";
 const HTTP_NOT_FOUND_RESPONSE:&'static [u8] = b"HTTP/1.1 400\r\nContent-Length: 23\r\n\r\nError: Tunnel Not Found";
+const HTTP_TUNNEL_REFUSED_RESPONSE:&'static [u8] = b"HTTP/1.1 500\r\nContent-Length: 32\r\n\r\nTunnel says: connection refused.";
 const HTTP_OK_RESPONSE:&'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
 const HEALTH_CHECK_PATH:&'static [u8] = b"/0xDEADBEEF_HEALTH_CHECK";
 
@@ -189,19 +190,33 @@ async fn tunnel_to_stream(stream_id: StreamId, mut sink: WriteHalf<TcpStream>, m
     loop {
         let result = queue.next().await;
 
+        let result = if let Some(message) = result {
+            match message {
+                StreamMessage::Data(data) => Some(data),
+                StreamMessage::TunnelRefused => {
+                    info!("tunnel refused");
+                    let _ = sink.write_all(HTTP_TUNNEL_REFUSED_RESPONSE).await;
+                    None
+                }
+                StreamMessage::NoClientTunnel => {
+                    info!("client tunnel not found");
+                    let _ = sink.write_all(HTTP_NOT_FOUND_RESPONSE).await;
+                    None
+                }
+            }
+        } else { None };
+
         let data = match result {
-            Some(StreamMessage::Data(data)) => data,
-            _ => {
+            Some(data) => data,
+            None => {
                 info!("done tunneling to sink");
-                let _ = sink.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                 let _ = sink.shutdown().await.map_err(|_e| {
                     error!("error shutting down tcp stream");
                 });
 
                 ACTIVE_STREAMS.write().unwrap().remove(&stream_id);
-
-                return;
-            },
+                return
+            }
         };
 
         let result = sink.write_all(&data).await;
