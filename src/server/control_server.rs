@@ -1,5 +1,6 @@
 pub use super::*;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| "ok");
@@ -142,6 +143,16 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
             }
             ControlPacket::Init(_) => {
                 error!("invalid protocol control::init message");
+                continue
+            },
+            ControlPacket::Ping => {
+                log::info!("got ping");
+
+                let mut tx = client.tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::delay_for(Duration::new(PING_INTERVAL, 0)).await;
+                    let _ = tx.send(ControlPacket::Ping).await;
+                });
                 continue
             }
         };

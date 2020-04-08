@@ -118,15 +118,21 @@ impl StreamId {
 pub enum ControlPacket {
     Init(StreamId),
     Data(StreamId, Vec<u8>),
-    Refused(StreamId)
+    Refused(StreamId),
+    Ping,
 }
+
+pub const PING_INTERVAL:u64 = 4;
+
+const EMPTY_STREAM:StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
 impl ControlPacket {
     pub fn serialize(self) -> Vec<u8> {
         match self {
             ControlPacket::Init(sid) => [vec![0x01], sid.0.to_vec()].concat(),
             ControlPacket::Data(sid, data) => [vec![0x02], sid.0.to_vec(), data].concat(),
-            ControlPacket::Refused(sid) => [vec![0x03], sid.0.to_vec()].concat()
+            ControlPacket::Refused(sid) => [vec![0x03], sid.0.to_vec()].concat(),
+            ControlPacket::Ping => [vec![0x04], EMPTY_STREAM.0.to_vec()].concat()
         }
     }
 
@@ -143,6 +149,7 @@ impl ControlPacket {
             0x01 => ControlPacket::Init(stream_id),
             0x02 => ControlPacket::Data(stream_id, data[9..].to_vec()),
             0x03 => ControlPacket::Refused(stream_id),
+            0x04 => ControlPacket::Ping,
             _ => return Err("invalid control byte in DataPacket".into())
         };
 

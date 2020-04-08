@@ -20,6 +20,7 @@ pub use wormhole::*;
 pub use config::*;
 
 use colour::*;
+use std::time::Duration;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<Vec<u8>>>>>;
 
@@ -55,7 +56,7 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) {
     let (mut ws_sink, mut ws_stream) = websocket.split();
 
     // tunnel channel
-    let (tunnel_tx, mut tunnel_rx) = unbounded::<ControlPacket>();
+    let (mut tunnel_tx, mut tunnel_rx) = unbounded::<ControlPacket>();
 
     // continuously write to websocket tunnel
     tokio::spawn(async move {
@@ -76,6 +77,9 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) {
             }
         }
     });
+
+    // kick off the pings
+    let _ = tunnel_tx.send(ControlPacket::Ping).await;
 
     // continuously read from websocket tunnel
     loop {
@@ -156,6 +160,15 @@ async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedS
     match control_packet {
         ControlPacket::Init(stream_id) => {
             info!("stream[{:?}] -> init", stream_id.to_string());
+        },
+        ControlPacket::Ping => {
+            log::info!("got ping");
+
+            let mut tx = tunnel_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::delay_for(Duration::new(PING_INTERVAL, 0)).await;
+                let _ = tx.send(ControlPacket::Ping).await;
+            });
         },
         ControlPacket::Refused(_) => {
             return Err("unexpected control packet".into())

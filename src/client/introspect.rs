@@ -1,6 +1,6 @@
 pub use super::StreamId;
 use colour::*;
-use log::{debug, info};
+use log::{debug};
 
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
