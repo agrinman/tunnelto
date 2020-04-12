@@ -14,13 +14,14 @@ Written in Rust. Built completely with async-io on top of tokio.
 4. [Self-hosting](#host-it-yourself)
 
 # Install
-
+## Brew (macOS)
 ```bash
-# with brew (macos)
-### coming soon!
+brew install agrinman/tap/wormhole
+```
 
-# with cargo
-$ cargo install wormhole-tunnel
+## Cargo
+```bash
+cargo install wormhole-tunnel
 ```
 
 
