@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 jobs:
   build:
@@ -75,7 +75,7 @@ jobs:
     steps:
       - name: Get the version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//v}
+        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}    
         
       - name: Download macOS
         uses: actions/download-artifact@v1
@@ -97,7 +97,7 @@ jobs:
 
       - name: Compress
         run: |
-          chmod +x macOS/wormhole
+          chmod +x macOS/${{ steps.get_version.outputs.VERSION }}/bin/wormhole
           chmod +x linux/wormhole
           export TAG="${{ steps.get_version.outputs.VERSION }}"
           tar -C windows/ -czvf wormhole-windows.tar.gz wormhole.exe
