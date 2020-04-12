@@ -56,16 +56,17 @@ pub async fn accept_connection(socket: TcpStream) {
 }
 
 fn validate_host_prefix(host: &str) -> Option<String> {
-    let host = match url::Host::parse(&host) {
-        Ok(url::Host::Domain(domain)) => {
-            domain
+    let url = format!("http://{}", host);
+
+    let host = match url::Url::parse(&url)
+        .map(|u| u.host().map(|h| h.to_owned()))
+        .unwrap_or(None)
+    {
+        Some(domain) => {
+            domain.to_string()
         },
-        Ok(url::Host::Ipv4(_)) | Ok(url::Host::Ipv6(_)) => {
-            error!("unsupported IpAddress as host");
-            return None
-        }
-        Err(e) => {
-            error!("invalid host header: {:?}", e);
+        None => {
+            error!("invalid host header");
             return None
         }
     };
@@ -146,7 +147,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
     control_server::send_client_stream_init(tunnel_stream.clone()).await;
 
     // now read from stream and forward to clients
-    let mut buf = [0; 2048];
+    let mut buf = [0; 16*1024];
 
     loop {
         // client is no longer connected

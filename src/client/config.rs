@@ -2,9 +2,10 @@ use structopt::StructOpt;
 use super::*;
 
 const WORMHOLE_HOST_ENV:&'static str = "WORMHOLE_HOST";
+const WORMHOLE_PORT_ENV:&'static str = "WORMHOLE_PORT";
 const TLS_OFF_ENV:&'static str = "TLS_OFF";
 
-const DEFAULT_WORMHOLE_HOST:&'static str = "echo.alexgr.in";
+const DEFAULT_WORMHOLE_HOST:&'static str = "wormhole.alexgr.in";
 const DEFAULT_WORMHOLE_CONTROL_PORT:&'static str = "10001";
 
 const WORMHOLE_DIR:&'static str = ".wormhole";
@@ -72,7 +73,7 @@ impl Config {
 
         pretty_env_logger::init();
 
-        let (secret_key, sub_domain, port) = match opts.command {
+        let (secret_key, sub_domain, local_port) = match opts.command {
             SubCommand::Auth { key } => {
                 let wormhole_dir = match dirs::home_dir().map(|h| h.join(WORMHOLE_DIR)) {
                     Some(path) => path,
@@ -105,18 +106,21 @@ impl Config {
 
         // get the host url
         let tls_off = env::var(TLS_OFF_ENV).is_ok();
-        let host_and_port = env::var(WORMHOLE_HOST_ENV)
-            .unwrap_or(format!("{}:{}", DEFAULT_WORMHOLE_HOST, DEFAULT_WORMHOLE_CONTROL_PORT));
+        let host = env::var(WORMHOLE_HOST_ENV)
+            .unwrap_or(format!("{}", DEFAULT_WORMHOLE_HOST));
+
+        let port = env::var(WORMHOLE_PORT_ENV)
+            .unwrap_or(format!("{}", DEFAULT_WORMHOLE_CONTROL_PORT));
 
         let scheme = if tls_off { "ws" } else { "wss" };
-        let server_url = format!("{}://{}/wormhole", scheme, host_and_port);
+        let server_url = format!("{}://{}:{}/wormhole", scheme, host, port);
 
         info!("Using wormhole URL: {}", &server_url);
 
         Ok(Config {
             client_id: ClientId::generate(),
             server_url,
-            local_port: port,
+            local_port,
             sub_domain: sub_domain.unwrap_or(ServerHello::random_domain()),
             secret_key: SecretKey(secret_key),
             tls_off,

@@ -39,7 +39,7 @@ pub async fn setup_new_stream(local_port: &str, mut tunnel_tx: UnboundedSender<C
 }
 
 pub async fn process_local_tcp(mut stream: ReadHalf<TcpStream>, mut tunnel: UnboundedSender<ControlPacket>, stream_id: StreamId) {
-    let mut buf = [0; 4096];
+    let mut buf = [0; 16*1024];
 
     loop {
         let n = stream.read(&mut buf).await.expect("failed to read data from socket");

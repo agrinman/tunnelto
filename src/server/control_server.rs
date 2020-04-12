@@ -133,8 +133,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
 
         let (stream_id, message) = match packet {
             ControlPacket::Data(stream_id, data) => {
-                let str_contents  = std::str::from_utf8(&data).unwrap_or("<non-utf8 response>");
-                info!("forwarding to stream[id={}]: {:?}", &stream_id.to_string(), str_contents);
+                info!("forwarding to stream[id={}]: {} bytes", &stream_id.to_string(), data.len());
                 (stream_id, StreamMessage::Data(data))
             },
             ControlPacket::Refused(stream_id) => {
