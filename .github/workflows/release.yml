@@ -108,5 +108,5 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "wormhole-macOS.tar.gz,wormhole-linux.tar.gz,wormhole-windows.tar.gz"
+          artifacts: "wormhole-${{ steps.get_version.outputs.VERSION }}.catalina.bottle.tar.gz,wormhole-linux.tar.gz,wormhole-windows.tar.gz"
           token: ${{ secrets.GITHUB_TOKEN }}
