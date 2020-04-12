@@ -75,13 +75,13 @@ jobs:
     steps:
       - name: Get the version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//v}
         
       - name: Download macOS
         uses: actions/download-artifact@v1
         with:
           name: wormhole-macOS-latest
-          path: macOS/
+          path: macOS/${{ steps.get_version.outputs.VERSION }}/bin/
 
       - name: Download ubuntu
         uses: actions/download-artifact@v1
@@ -101,7 +101,7 @@ jobs:
           chmod +x linux/wormhole
           export TAG="${{ steps.get_version.outputs.VERSION }}"
           tar -C windows/ -czvf wormhole-windows.tar.gz wormhole.exe
-          tar -C macOS/ -czvf "wormhole-$TAG.catalina.bottle.tar.gz" wormhole
+          tar -C macOS/ -czvf "wormhole-$TAG.catalina.bottle.tar.gz" *
           tar -C linux/ -czvf wormhole-linux.tar.gz wormhole
 
       - name: Create Release
