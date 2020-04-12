@@ -101,7 +101,7 @@ jobs:
           chmod +x linux/wormhole
           export TAG="${{ steps.get_version.outputs.VERSION }}"
           tar -C windows/ -czvf wormhole-windows.tar.gz wormhole.exe
-          tar -C macOS/ -czvf "wormhole-$TAG.catalina.bottle.tar.gz" *
+          tar -C macOS/ -czvf "wormhole-$TAG.catalina.bottle.tar.gz" ${{ steps.get_version.outputs.VERSION }}/bin/wormhole
           tar -C linux/ -czvf wormhole-linux.tar.gz wormhole
 
       - name: Create Release
