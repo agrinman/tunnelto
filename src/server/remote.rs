@@ -169,6 +169,10 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
 
         if n == 0 {
             info!("stream ended");
+            let _ = tunnel_stream.client.tx.send(ControlPacket::End(tunnel_stream.id.clone())).await
+                .map_err(|e| {
+                    error!("failed to send end signal: {:?}", e);
+                });
             return;
         }
 

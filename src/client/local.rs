@@ -30,7 +30,7 @@ pub async fn setup_new_stream(local_port: &str, mut tunnel_tx: UnboundedSender<C
     });
 
     // Forward remote packets to local tcp
-    let (tx, rx) = unbounded::<Vec<u8>>();
+    let (tx, rx) = unbounded();
     ACTIVE_STREAMS.write().unwrap().insert(stream_id.clone(), tx.clone());
 
     tokio::spawn(async move {
@@ -61,18 +61,21 @@ pub async fn process_local_tcp(mut stream: ReadHalf<TcpStream>, mut tunnel: Unbo
     }
 }
 
-async fn forward_to_local_tcp(stream_id: StreamId, mut sink: WriteHalf<TcpStream>, mut queue: UnboundedReceiver<Vec<u8>>) {
+async fn forward_to_local_tcp(stream_id: StreamId, mut sink: WriteHalf<TcpStream>, mut queue: UnboundedReceiver<StreamMessage>) {
     loop {
         let data = match queue.next().await {
-            Some(data) => data,
-            None => {
-                warn!("local forward queue is empty");
+            Some(StreamMessage::Data(data)) => data,
+            None | Some(StreamMessage::Close) => {
+                warn!("closing stream");
+                let _ = sink.shutdown().await.map_err(|e| {
+                    error!("failed to shutdown: {:?}", e);
+                });
                 return
             }
         };
 
         sink.write_all(&data).await.expect("failed to write packet data to local tcp socket");
-        debug!("wrote to local service: {:?}", std::str::from_utf8(&data).unwrap_or("<non utf8>"));
+        debug!("wrote to local service: {:?}", data.len());
 
         let stream_id_clone =  stream_id.clone();
         introspect::log_incoming(stream_id_clone, data);

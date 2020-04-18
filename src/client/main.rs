@@ -22,10 +22,16 @@ pub use config::*;
 use colour::*;
 use std::time::Duration;
 
-pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<Vec<u8>>>>>;
+pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
 
 lazy_static::lazy_static! {
     pub static ref ACTIVE_STREAMS:ActiveStreams = Arc::new(RwLock::new(HashMap::new()));
+}
+
+#[derive(Debug, Clone)]
+pub enum StreamMessage {
+    Data(Vec<u8>),
+    Close,
 }
 
 
@@ -173,8 +179,23 @@ async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedS
         ControlPacket::Refused(_) => {
             return Err("unexpected control packet".into())
         }
+        ControlPacket::End(stream_id) => {
+            // find the stream
+            info!("got end stream [{:?}]", &stream_id);
+            tokio::spawn(async move {
+                let stream = ACTIVE_STREAMS.read().unwrap().get(&stream_id).cloned();
+                if let Some(mut tx) = stream {
+                    tokio::time::delay_for(Duration::from_secs(5)).await;
+                    let _ = tx.send(StreamMessage::Close).await.map_err(|e| {
+                        error!("failed to send stream close: {:?}", e);
+                    });
+                    ACTIVE_STREAMS.write().unwrap().remove(&stream_id);
+                }
+            });
+
+        },
         ControlPacket::Data(stream_id, data) => {
-            info!("stream[{:?}] -> got data: {:?}", stream_id.to_string(), std::str::from_utf8(&data));
+            info!("stream[{:?}] -> new data: {:?}", stream_id.to_string(), data.len());
 
             if !ACTIVE_STREAMS.read().unwrap().contains_key(&stream_id) {
                 local::setup_new_stream(&config.local_port, tunnel_tx.clone(), stream_id.clone()).await;
@@ -185,7 +206,7 @@ async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedS
 
             // forward data to it
             if let Some(mut tx) = active_stream {
-                tx.send(data).await?;
+                tx.send(StreamMessage::Data(data)).await?;
                 info!("forwarded to local tcp ({})", stream_id.to_string());
             } else {
                 error!("got data but no stream to send it to.");

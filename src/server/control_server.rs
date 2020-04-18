@@ -140,7 +140,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 log::info!("tunnel says: refused");
                 (stream_id, StreamMessage::TunnelRefused)
             }
-            ControlPacket::Init(_) => {
+            ControlPacket::Init(_) | ControlPacket::End(_) => {
                 error!("invalid protocol control::init message");
                 continue
             },
