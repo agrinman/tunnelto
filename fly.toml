@@ -6,7 +6,8 @@ app = "blackhole"
 
   [services.concurrency]
     hard_limit = 100
-   =
+    soft_limit = 100
+
   [[services.ports]]
     handlers = ["tls", "http"]
     port = "10001"
