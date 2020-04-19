@@ -1,7 +1,11 @@
-![Build and Release](https://github.com/agrinman/wormhole/workflows/Build%20and%20Release/badge.svg)   ![Crates.io](https://img.shields.io/crates/v/wormhole-tunnel) ![@AlexGrinman](https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman)
-
 <p align="center">
 <img src="https://repository-images.githubusercontent.com/249120770/6208df00-7865-11ea-9134-cb78fe857eed" align="center" height="280px"/>
+</p>
+
+<p align="center">    
+  <a href="https://github.com/agrinman/wormhole/actions?query=workflow%3A%22Build+and+Release%22"><img src="https://github.com/agrinman/wormhole/workflows/Build%20and%20Release/badge.svg" alt="BuildRelease"></a>
+  <a href="https://crates.io/crates/wormhole-tunnel"><img src="https://img.shields.io/crates/v/wormhole-tunnel" alt="crate"></a>
+  <a href="https://twitter.com/alexgrinman"><img src="https://img.shields.io/twitter/follow/alexgrinman?label=%40AlexGrinman" alt="crate"></a>
 </p>
 
 # wormhole
