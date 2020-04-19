@@ -24,16 +24,32 @@ brew install agrinman/tap/wormhole
 cargo install wormhole-tunnel
 ```
 
-
 Or **Download a release for your target OS here**: [wormhole/releases](https://github.com/agrinman/wormhole/releases)
 
 # Usage
+## Quick Start
 ```shell script
-# Store the authentication key
-wormhole auth --key <SECRET_KEY>
+⇢ wormhole start -p 8000
+```
+The above command opens a wormhole and starts tunneling traffic to `localhost:8000`.
 
-# Start tunneling traffic to :8000
-wormhole start -p 8000
+## More Options:
+```shell script
+⇢ wormhole start -h
+wormhole-start 0.1.4
+Start the wormhole
+
+USAGE:
+    wormhole start [OPTIONS] --port <port>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -k, --key <key>                 Sets an API authentication key to use for this wormhole
+    -p, --port <port>               Sets the port to forward incoming tunnel traffic to on localhost
+    -s, --subdomain <sub-domain>    Specify a sub-domain for this wormhole
 ```
 
 # How does it work?
@@ -41,19 +57,19 @@ wormhole start -p 8000
 The wormhole server both the operates control server (via port 5000, using websockets) and accepts 
 raw TCP streams (via port 8080).
 
-1. New clients connect over websockets to establish the `client-tunnel`. 
-2. When a new raw TCP stream connects, the wormhole server reads the incoming bytes and writes it to the `client-tunnel`
-3. When incoming data is received from the `client-tunnel`, the control server writes those bytes into the TCP stream.
+1. New clients connect over websockets to establish the `client tunnel`. 
+2. When a new raw TCP stream connects, the wormhole server reads the incoming bytes and writes it to the `client tunnel`
+3. When incoming data is received from the `client tunnel`, the control server writes those bytes into the TCP stream.
 
 ## Client
-The wormhole client establishes a websocket connections to the wormhole server to establish the `remote-tunnel`,
+The wormhole client establishes a websocket connections to the wormhole server to establish the `remote tunnel`,
 and then:
 
-1. Reads TCP bytes from the `remote-tunnel`
+1. Reads TCP bytes from the `remote tunnel`
 2. Opens a new local TCP stream to the locally running server (specified as a program argument)
 3. Writes the TCP bytes from to the local stream
 4. Reads TCP bytes from the local stream
-5. Writes the outgoing TCP bytes bacl into the `remote-tunnel`
+5. Writes the outgoing TCP bytes bacl into the `remote tunnel`
 
 ## Caveats
 This implementation does not support multiple running servers (i.e. centralized coordination).
@@ -63,18 +79,22 @@ as the remote TCP stream.
 # Host it yourself
 1. Compile the server for the musl target. See the `musl_build.sh` for a way to do this trivially with Docker!
 2. See `Dockerfile` for a simple alpine based image that runs that server binary.
-3. Deploy the image where-ever you want.
-4. Don't forget to set env's `ALLOWED_HOSTS` and `SECRET_KEY` (see below how they're used).
+3. Deploy the image where ever you want.
 
 ## Testing Locally
 ```shell script
-# Expects TCP traffic on 8080 and control websockets on 5000
-ALLOWED_HOSTS="mytunnelhost.com" SECRET_KEY="SECRET_KEY" cargo run --bin wormhole_server
+# Run the Server: xpects TCP traffic on 8080 and control websockets on 5000
+ALLOWED_HOSTS="localhost" ALLOW_UNKNOWN_CLIENTS=1 cargo run --bin wormhole_server
 
-# Run a local wormhole pointing to your local wormhole_server
-WEBSOCKET_HOST=localhost:5000 TLS_OFF=1 cargo run --bin wormhole -- -s "<subdomain>" -k "<SECRET_KEY>" -p 8000
+# Run a local wormhole talking to your local wormhole_server
+WORMHOLE_HOST="localhost" WORMHOLE_PORT=5000 TLS_OFF=1 cargo run --bin wormhole -- start -p 8000
 
 # Test it out!
 # Remember 8080 is our local wormhole_server TCP server
-curl -H '<subdomain>.mytunnelhost.com' "http://localhost:8080/some_path?with=somequery"
+curl -H '<subdomain>.localhost' "http://localhost:8080/some_path?with=somequery"
 ```
+
+### Server Env Vars
+- `ALLOWED_HOSTS`: which hostname suffixes do we allow forwarding on
+- `SECRET_KEY`: an authentication key for restricting access to your wormhole server
+- `ALLOW_UNKNOWN_CLIENTS`: a boolean flag, if set, enables unknown (no authentication) clients to use your wormhole. Note that unknown clients are not allowed to chose a subdomain via `-s`.

@@ -14,7 +14,7 @@ const SECRET_KEY_FILE:&'static str = "key.token";
 
 /// Command line arguments
 #[derive(Debug, StructOpt)]
-#[structopt(name = "wormhole", about = "Expose your local web server to the internet with a public url.")]
+#[structopt(name = "wormhole", author="Alex Grinman <wormhole@alexgr.in>", about = "Expose your local web server to the internet with a public url.")]
 struct Opts {
     /// A level of verbosity, and can be used multiple times
     #[structopt(short = "v", long = "verbose")]
