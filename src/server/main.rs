@@ -30,6 +30,9 @@ lazy_static! {
     pub static ref ALLOWED_HOSTS:Vec<String> = allowed_host_suffixes();
 }
 
+/// TODO: add support for client registration and per-client api keys
+/// For now this admin key is only for locking down custom deployments
+/// See `allow_non_authenticated` for more.
 pub fn load_secret_key() -> SecretKey {
     match std::env::var("SECRET_KEY") {
         Ok(key) => SecretKey(key),
@@ -40,10 +43,19 @@ pub fn load_secret_key() -> SecretKey {
     }
 }
 
+/// What hosts do we allow tunnels on:
+/// i.e:    baz.com => *.baz.com
+///         foo.bar => *.foo.bar
 pub fn allowed_host_suffixes() -> Vec<String> {
     std::env::var("ALLOWED_HOSTS")
         .map(|s| s.split(",").map(String::from).collect())
         .unwrap_or(vec![])
+}
+
+/// For demo purposes, allow unknown client connections
+/// controlled by an env below
+pub fn allow_unknown_clients() -> bool {
+    std::env::var("ALLOW_UNKNOWN_CLIENTS").is_ok()
 }
 
 #[tokio::main]

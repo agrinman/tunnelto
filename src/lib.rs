@@ -12,6 +12,12 @@ impl SecretKey {
         rand::thread_rng().fill_bytes(&mut key);
         Self(base64::encode_config(&key, base64::URL_SAFE_NO_PAD))
     }
+
+    #[allow(unused)]
+    pub fn anonymous_key() -> Self {
+        let mut key = [0u8; 32];
+        Self(base64::encode_config(&key, base64::URL_SAFE_NO_PAD))
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -43,6 +49,7 @@ const CLIENT_HELLO_TTL_SECONDS:i64 = 300;
 pub struct ClientHello {
     pub id: ClientId,
     pub sub_domain: Option<String>,
+    pub is_anonymous: bool,
     // epoch
     unix_seconds: i64,
     //hex encoded
@@ -50,27 +57,40 @@ pub struct ClientHello {
 }
 
 impl ClientHello {
-    pub fn generate(id: ClientId, secret_key: &SecretKey, sub_domain: Option<String>) -> (Self, ClientId) {
+    pub fn generate(id: ClientId, secret_key: &Option<SecretKey>, sub_domain: Option<String>) -> (Self, ClientId) {
         let unix_seconds = Utc::now().timestamp();
-
         let input = format!("{}", unix_seconds);
-        let signature = hmac_sha256::HMAC::mac(input.as_bytes(), secret_key.0.as_bytes());
+        let signature = match secret_key {
+            Some(key) => hmac_sha256::HMAC::mac(input.as_bytes(), key.0.as_bytes()),
+            None => hmac_sha256::HMAC::mac(input.as_bytes(), SecretKey::anonymous_key().0.as_bytes()),
+        };
 
         (ClientHello {
-            id: id.clone(), sub_domain, unix_seconds, signature: hex::encode(signature)
+            id: id.clone(), sub_domain, unix_seconds, signature: hex::encode(signature), is_anonymous: secret_key.is_none()
         }, id)
     }
 
     #[allow(unused)]
-    pub fn verify(secret_key: &SecretKey, data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn verify(secret_key: &SecretKey, data: &[u8], allow_unknown: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let client_hello:ClientHello = serde_json::from_slice(&data)?;
 
+        // check the time
         if (Utc::now().timestamp() - client_hello.unix_seconds).abs() > CLIENT_HELLO_TTL_SECONDS {
             return Err("Expired client hello".into())
         }
 
+        // check that anonymous is allowed
+        if !allow_unknown && client_hello.is_anonymous {
+            return Err("Anonymous clients are not allowed".into())
+        }
+
         let input = format!("{}", client_hello.unix_seconds);
-        let expected = hmac_sha256::HMAC::mac(input.as_bytes(), secret_key.0.as_bytes());
+
+        let expected = if client_hello.is_anonymous {
+            hmac_sha256::HMAC::mac(input.as_bytes(), SecretKey::anonymous_key().0.as_bytes())
+        } else {
+            hmac_sha256::HMAC::mac(input.as_bytes(), secret_key.0.as_bytes())
+        };
 
         if hex::encode(expected) != client_hello.signature {
             return Err("Bad signature in client hello".into())

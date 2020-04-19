@@ -45,33 +45,40 @@ async fn try_client_handshake(mut websocket: WebSocket) -> Option<(WebSocket, Cl
         },
     };
 
-    let client_hello = ClientHello::verify(&SECRET_KEY, client_hello_data.as_bytes()).map_err(|e| format!("{:?}", e));
+    let client_hello = ClientHello::verify(&SECRET_KEY, client_hello_data.as_bytes(), allow_unknown_clients())
+        .map_err(|e| format!("{:?}", e));
+
     let (client_hello, sub_domain) = match  client_hello {
         Ok(ch) => {
-            // check that the subdomain is available and valid
-            let sub_domain = if let Some(sub_domain) = &ch.sub_domain {
-                // ignore uppercase
-                let sub_domain = sub_domain.to_lowercase();
 
-                if sub_domain.chars().filter(|c| !c.is_alphanumeric()).count() > 0 {
-                    error!("invalid client hello: only alphanumeric chars allowed!");
-                    let data = serde_json::to_vec(&ServerHello::InvalidSubDomain).unwrap_or_default();
-                    let _ = websocket.send(Message::binary(data)).await;
-                    return None
+            let sub_domain = match (ch.is_anonymous, &ch.sub_domain)  {
+                // don't allow anonymous clients to pick subdomains
+                (true, _) | (_, None) => ServerHello::random_domain(),
+
+                // otherwise, try to assign the sub domain
+                (false, Some(sub_domain)) => {
+                    // ignore uppercase
+                    let sub_domain = sub_domain.to_lowercase();
+
+                    if sub_domain.chars().filter(|c| !c.is_alphanumeric()).count() > 0 {
+                        error!("invalid client hello: only alphanumeric chars allowed!");
+                        let data = serde_json::to_vec(&ServerHello::InvalidSubDomain).unwrap_or_default();
+                        let _ = websocket.send(Message::binary(data)).await;
+                        return None
+                    }
+
+                    let existing_client = Connections::client_for_host(&sub_domain);
+                    if existing_client.is_some() && Some(&ch.id) != existing_client.as_ref() {
+                        error!("invalid client hello: requested sub domain in use already!");
+                        let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
+                        let _ = websocket.send(Message::binary(data)).await;
+                        return None
+                    }
+
+                    sub_domain
                 }
-
-                let existing_client = Connections::client_for_host(&sub_domain);
-                if existing_client.is_some() && Some(&ch.id) != existing_client.as_ref() {
-                    error!("invalid client hello: requested sub domain in use already!");
-                    let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
-                    let _ = websocket.send(Message::binary(data)).await;
-                    return None
-                }
-
-                sub_domain
-            } else {
-                ServerHello::random_domain()
             };
+
 
             (ch, sub_domain)
         },
@@ -91,7 +98,7 @@ async fn try_client_handshake(mut websocket: WebSocket) -> Option<(WebSocket, Cl
         return None
     }
 
-    info!("new client connected: {:?}", &client_hello.id);
+    info!("new client connected: {:?}{}", &client_hello.id, if client_hello.is_anonymous { " (anonymous)"} else { "" });
     Some((websocket, client_hello.id, sub_domain))
 }
 

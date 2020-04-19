@@ -57,7 +57,7 @@ pub struct Config {
     pub host: String,
     pub local_port: String,
     pub sub_domain: String,
-    pub secret_key: SecretKey,
+    pub secret_key: Option<SecretKey>,
     pub tls_off: bool
 }
 
@@ -91,16 +91,20 @@ impl Config {
             },
             SubCommand::Start { key, sub_domain, port } => {
                 (match key {
-                    Some(key) => key,
+                    Some(key) => Some(key),
                     None => {
-                        let key_file_path = match dirs::home_dir().map(|h| h.join(WORMHOLE_DIR).join(SECRET_KEY_FILE)) {
-                            Some(path) => path,
-                            None => {
-                                panic!("Missing authentication key file. Could not find home directory.")
-                            }
-                        };
-
-                        std::fs::read_to_string(key_file_path).expect("Missing authentication token. Try running the `auth` command.")
+                        dirs::home_dir()
+                            .map(|h| h.join(WORMHOLE_DIR).join(SECRET_KEY_FILE))
+                            .map(|path| {
+                                if path.exists() {
+                                    std::fs::read_to_string(path)
+                                        .map_err(|e| error!("Error reading authentication token: {:?}", e))
+                                        .ok()
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or(None)
                     }
                 }, sub_domain, port)
             }
@@ -128,7 +132,7 @@ impl Config {
             host,
             local_port,
             sub_domain: sub_domain.unwrap_or(ServerHello::random_domain()),
-            secret_key: SecretKey(secret_key),
+            secret_key: secret_key.map(|s| SecretKey(s)),
             tls_off,
         })
     }
