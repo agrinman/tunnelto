@@ -1,12 +1,13 @@
 use structopt::StructOpt;
 use super::*;
 
-const WORMHOLE_HOST_ENV:&'static str = "WORMHOLE_HOST";
-const WORMHOLE_PORT_ENV:&'static str = "WORMHOLE_PORT";
+const HOST_ENV:&'static str = "WORMHOLE_HOST";
+const PORT_ENV:&'static str = "WORMHOLE_PORT";
 const TLS_OFF_ENV:&'static str = "TLS_OFF";
 
-const DEFAULT_WORMHOLE_HOST:&'static str = "wormhole.alexgr.in";
-const DEFAULT_WORMHOLE_CONTROL_PORT:&'static str = "10001";
+const DEFAULT_HOST:&'static str = "tunnelto.dev";
+const DEFAULT_CONTROL_HOST:&'static str = "wormhole.tunnelto.dev";
+const DEFAULT_CONTROL_PORT:&'static str = "10001";
 
 const WORMHOLE_DIR:&'static str = ".wormhole";
 const SECRET_KEY_FILE:&'static str = "key.token";
@@ -52,7 +53,8 @@ enum SubCommand {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub client_id: ClientId,
-    pub server_url: String,
+    pub control_url: String,
+    pub host: String,
     pub local_port: String,
     pub sub_domain: String,
     pub secret_key: SecretKey,
@@ -106,20 +108,24 @@ impl Config {
 
         // get the host url
         let tls_off = env::var(TLS_OFF_ENV).is_ok();
-        let host = env::var(WORMHOLE_HOST_ENV)
-            .unwrap_or(format!("{}", DEFAULT_WORMHOLE_HOST));
+        let host = env::var(HOST_ENV)
+            .unwrap_or(format!("{}", DEFAULT_HOST));
 
-        let port = env::var(WORMHOLE_PORT_ENV)
-            .unwrap_or(format!("{}", DEFAULT_WORMHOLE_CONTROL_PORT));
+        let control_host = env::var(HOST_ENV)
+            .unwrap_or(format!("{}", DEFAULT_CONTROL_HOST));
+
+        let port = env::var(PORT_ENV)
+            .unwrap_or(format!("{}", DEFAULT_CONTROL_PORT));
 
         let scheme = if tls_off { "ws" } else { "wss" };
-        let server_url = format!("{}://{}:{}/wormhole", scheme, host, port);
+        let control_url = format!("{}://{}:{}/wormhole", scheme, control_host, port);
 
-        info!("Using wormhole URL: {}", &server_url);
+        info!("Control Server URL: {}", &control_url);
 
         Ok(Config {
             client_id: ClientId::generate(),
-            server_url,
+            control_url,
+            host,
             local_port,
             sub_domain: sub_domain.unwrap_or(ServerHello::random_domain()),
             secret_key: SecretKey(secret_key),
@@ -129,8 +135,8 @@ impl Config {
 
     pub fn activation_url(&self, server_chosen_sub_domain: &str) -> String {
         format!("{}://{}.{}",
-                  if self.tls_off { "http"} else { "https"},
+                  if self.tls_off { "http" } else { "https" },
                   &server_chosen_sub_domain,
-                  env::var(WORMHOLE_HOST_ENV).unwrap_or(DEFAULT_WORMHOLE_HOST.to_string()))
+                  &self.host)
     }
 }

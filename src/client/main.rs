@@ -109,7 +109,7 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) {
 }
 
 async fn connect_to_wormhole(config: &Config) -> WebSocketStream<MaybeTlsStream<TcpStream>> {
-    let (mut websocket, _) = tokio_tungstenite::connect_async(&config.server_url).await.expect("Failed to connect to wormhole server.");
+    let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await.expect("Failed to connect to wormhole server.");
 
     // send our Client Hello message
     let (client_hello, id) = ClientHello::generate(config.client_id.clone(), &config.secret_key, Some(config.sub_domain.clone()));
