@@ -14,8 +14,7 @@ Written in Rust. Built completely with async-io on top of tokio.
 
 1. [Install Wormhole](#install)
 2. [Usage Instructions](#usage)
-3. [How does it work?](#how-does-it-work)
-4. [Self-hosting](#host-it-yourself)
+3. [Host it yourself](#host-it-yourself)
 
 # Install
 ## Brew (macOS)
@@ -56,30 +55,6 @@ OPTIONS:
     -s, --subdomain <sub-domain>    Specify a sub-domain for this wormhole
 ```
 
-# How does it work?
-## Server
-The wormhole server both the operates control server (via port 5000, using websockets) and accepts 
-raw TCP streams (via port 8080).
-
-1. New clients connect over websockets to establish the `client tunnel`. 
-2. When a new raw TCP stream connects, the wormhole server reads the incoming bytes and writes it to the `client tunnel`
-3. When incoming data is received from the `client tunnel`, the control server writes those bytes into the TCP stream.
-
-## Client
-The wormhole client establishes a websocket connections to the wormhole server to establish the `remote tunnel`,
-and then:
-
-1. Reads TCP bytes from the `remote tunnel`
-2. Opens a new local TCP stream to the locally running server (specified as a program argument)
-3. Writes the TCP bytes from to the local stream
-4. Reads TCP bytes from the local stream
-5. Writes the outgoing TCP bytes bacl into the `remote tunnel`
-
-## Caveats
-This implementation does not support multiple running servers (i.e. centralized coordination).
-Therefore, if you deploy multiple instances of the server, it will only work if the client connects to the same instance
-as the remote TCP stream.
-
 # Host it yourself
 1. Compile the server for the musl target. See the `musl_build.sh` for a way to do this trivially with Docker!
 2. See `Dockerfile` for a simple alpine based image that runs that server binary.
@@ -102,3 +77,9 @@ curl -H '<subdomain>.localhost' "http://localhost:8080/some_path?with=somequery"
 - `ALLOWED_HOSTS`: which hostname suffixes do we allow forwarding on
 - `SECRET_KEY`: an authentication key for restricting access to your wormhole server
 - `ALLOW_UNKNOWN_CLIENTS`: a boolean flag, if set, enables unknown (no authentication) clients to use your wormhole. Note that unknown clients are not allowed to chose a subdomain via `-s`.
+
+
+## Caveats
+This implementation does not support multiple running servers (i.e. centralized coordination).
+Therefore, if you deploy multiple instances of the server, it will only work if the client connects to the same instance
+as the remote TCP stream.
