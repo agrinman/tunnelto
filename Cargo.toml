@@ -1,7 +1,7 @@
 [package]
 name = "wormhole-tunnel"
 description = "expose your local web server to the internet with a public url"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Alex Grinman <me@alexgr.in>"]
 edition = "2018"
 license = "MIT"
