@@ -23,6 +23,7 @@ use colour::*;
 use std::time::Duration;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
+type Error = Box<dyn std::error::Error>;
 
 lazy_static::lazy_static! {
     pub static ref ACTIVE_STREAMS:ActiveStreams = Arc::new(RwLock::new(HashMap::new()));
@@ -39,24 +40,34 @@ pub enum StreamMessage {
 async fn main() {
     setup_panic!();
 
-    let config = match Config::get() {
+    let mut config = match Config::get() {
         Ok(config) => config,
         Err(_) => return,
     };
 
-    e_green_ln!("Welcome to wormhole!\n{}\n", include_str!("../../wormhole_ascii.txt"));
-
     loop {
         let (restart_tx, mut restart_rx) = unbounded();
         let wormhole = run_wormhole(config.clone(), restart_tx);
-        let _  = futures::future::select(Box::pin(wormhole), restart_rx.next()).await;
+        let result = futures::future::select(Box::pin(wormhole), restart_rx.next()).await;
+
+        match result {
+            futures::future::Either::Left((wormhole_result, _)) => {
+                if let Err(e) = wormhole_result {
+                    e_red_ln!("Error: {:?}", e);
+                    return
+                }
+            },
+            _ => {},
+        }
+
+        config.first_run = false;
         info!("restarting wormhole");
     }
 }
 
 /// Setup the tunnel to our control server
-async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) {
-    let websocket = connect_to_wormhole(&config).await;
+async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Result<(), Error> {
+    let websocket = connect_to_wormhole(&config).await?;
 
     // split reading and writing
     let (mut ws_sink, mut ws_stream) = websocket.split();
@@ -93,26 +104,28 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) {
             Some(Ok(message)) => {
                 if let Err(e) = process_control_flow_message(&config, tunnel_tx.clone(), message.into_data()).await {
                     error!("Malformed protocol control packet: {:?}", e);
-                    return
+                    return Ok(())
                 }
             },
             Some(Err(e)) => {
                 warn!("websocket read error: {:?}", e);
-                return
+                return Ok(())
             },
             None => {
                 warn!("websocket sent none");
-                return
+                return Ok(())
             }
         }
     }
 }
 
-async fn connect_to_wormhole(config: &Config) -> WebSocketStream<MaybeTlsStream<TcpStream>> {
-    let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await.expect("Failed to connect to wormhole server.");
+async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
+    let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
-    let (client_hello, id) = ClientHello::generate(config.client_id.clone(), &config.secret_key, Some(config.sub_domain.clone()));
+    let (client_hello, id) = ClientHello::generate(config.client_id.clone(),
+                                                   &config.secret_key,
+                                                   config.sub_domain.clone());
     info!("connecting to wormhole as client {}", &id);
 
     let hello = serde_json::to_vec(&client_hello).unwrap();
@@ -132,32 +145,38 @@ async fn connect_to_wormhole(config: &Config) -> WebSocketStream<MaybeTlsStream<
                 },
                 ServerHello::AuthFailed => {
                     error!("server denied our authentication token.");
-                    panic!("Authentication failed. Check your authentication key.");
+                    return Err("Authentication failed. Check your authentication key.")?;
                 },
                 ServerHello::InvalidSubDomain =>{
-                    panic!("Invalid sub-domain specified");
+                    return Err("Invalid sub-domain specified")?;
                 }
                 ServerHello::SubDomainInUse => {
                     error!("sub-domain already in use");
-                    panic!("Cannot use this sub-domain, it's already taken.")
+                    return Err("Cannot use this sub-domain, it's already taken.")?
                 }
             }
         }
         Some(Ok(Err(e))) => {
             error!("invalid server hello: {:?}", e);
-            panic!("connection failed.");
+            return Err("connection failed.")?;
         },
         Some(Err(e)) => {
             error!("websocket error: {:?}", e);
-            panic!("connection failed.");
+            return Err("connection failed.")?;
         }
         None => {
-            panic!("Empty reply from server. Unknown failure to connect to server.")
+            return Err("Empty reply from server. Unknown failure to connect to server.")?
         }
     };
 
-    eprintln!("Wormhole activated on: {}", config.activation_url(&sub_domain));
-    websocket
+    if config.first_run {
+        e_green_ln!("Welcome to wormhole!\n{}\n\n", include_str!("../../wormhole_ascii.txt"));
+    }
+
+    e_dark_magenta!("Wormhole activated on: ");
+    e_cyan_ln!("{}", config.activation_url(&sub_domain));
+
+    Ok(websocket)
 }
 
 async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {

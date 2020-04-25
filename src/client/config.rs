@@ -56,9 +56,10 @@ pub struct Config {
     pub control_url: String,
     pub host: String,
     pub local_port: String,
-    pub sub_domain: String,
+    pub sub_domain: Option<String>,
     pub secret_key: Option<SecretKey>,
-    pub tls_off: bool
+    pub tls_off: bool,
+    pub first_run: bool,
 }
 
 impl Config {
@@ -131,9 +132,10 @@ impl Config {
             control_url,
             host,
             local_port,
-            sub_domain: sub_domain.unwrap_or(ServerHello::random_domain()),
+            sub_domain,
             secret_key: secret_key.map(|s| SecretKey(s)),
             tls_off,
+            first_run: true,
         })
     }
 
