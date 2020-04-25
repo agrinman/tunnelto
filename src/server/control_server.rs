@@ -51,12 +51,11 @@ async fn try_client_handshake(mut websocket: WebSocket) -> Option<(WebSocket, Cl
     let (client_hello, sub_domain) = match  client_hello {
         Ok(ch) => {
 
-            let sub_domain = match (ch.is_anonymous, &ch.sub_domain)  {
-                // don't allow anonymous clients to pick subdomains
-                (true, _) | (_, None) => ServerHello::random_domain(),
+            let sub_domain = match  &ch.sub_domain {
+                None => ServerHello::random_domain(),
 
                 // otherwise, try to assign the sub domain
-                (false, Some(sub_domain)) => {
+                Some(sub_domain) => {
                     // ignore uppercase
                     let sub_domain = sub_domain.to_lowercase();
 
@@ -67,15 +66,20 @@ async fn try_client_handshake(mut websocket: WebSocket) -> Option<(WebSocket, Cl
                         return None
                     }
 
-                    let existing_client = Connections::client_for_host(&sub_domain);
-                    if existing_client.is_some() && Some(&ch.id) != existing_client.as_ref() {
-                        error!("invalid client hello: requested sub domain in use already!");
-                        let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
-                        let _ = websocket.send(Message::binary(data)).await;
-                        return None
-                    }
+                    // don't allow specified domains for anonymous clients
+                    if ch.is_anonymous {
+                        ServerHello::prefixed_random_domain(&sub_domain)
+                    } else {
+                        let existing_client = Connections::client_for_host(&sub_domain);
+                        if existing_client.is_some() && Some(&ch.id) != existing_client.as_ref() {
+                            error!("invalid client hello: requested sub domain in use already!");
+                            let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
+                            let _ = websocket.send(Message::binary(data)).await;
+                            return None
+                        }
 
-                    sub_domain
+                        sub_domain
+                    }
                 }
             };
 

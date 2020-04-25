@@ -41,6 +41,11 @@ impl ServerHello {
             .collect::<String>()
             .to_lowercase()
     }
+
+    #[allow(unused)]
+    pub fn prefixed_random_domain(prefix: &str) -> String {
+        format!("{}-{}", prefix, Self::random_domain())
+    }
 }
 
 const CLIENT_HELLO_TTL_SECONDS:i64 = 300;
