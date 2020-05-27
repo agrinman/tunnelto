@@ -9,7 +9,7 @@ const DEFAULT_HOST:&'static str = "tunnelto.dev";
 const DEFAULT_CONTROL_HOST:&'static str = "wormhole.tunnelto.dev";
 const DEFAULT_CONTROL_PORT:&'static str = "10001";
 
-const WORMHOLE_DIR:&'static str = ".wormhole";
+const SETTINGS_DIR:&'static str = ".tunnelto";
 const SECRET_KEY_FILE:&'static str = "key.token";
 
 /// Command line arguments
@@ -77,7 +77,7 @@ impl Config {
         let (secret_key, sub_domain, local_port) = match opts.command {
             Some(SubCommand::SetAuth { key }) => {
                 let key = opts.key.unwrap_or(key);
-                let wormhole_dir = match dirs::home_dir().map(|h| h.join(WORMHOLE_DIR)) {
+                let wormhole_dir = match dirs::home_dir().map(|h| h.join(SETTINGS_DIR)) {
                     Some(path) => path,
                     None => {
                         panic!("Could not find home directory to store token.")
@@ -98,7 +98,7 @@ impl Config {
                     Some(key) => Some(key),
                     None => {
                         dirs::home_dir()
-                            .map(|h| h.join(WORMHOLE_DIR).join(SECRET_KEY_FILE))
+                            .map(|h| h.join(SETTINGS_DIR).join(SECRET_KEY_FILE))
                             .map(|path| {
                                 if path.exists() {
                                     std::fs::read_to_string(path)
