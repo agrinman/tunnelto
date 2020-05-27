@@ -23,11 +23,11 @@ struct Opts {
     #[structopt(subcommand)]
     command: Option<SubCommand>,
 
-    /// Sets an API authentication key to use for this wormhole
+    /// Sets an API authentication key to use for this tunnel
     #[structopt(short = "k", long = "key")]
     key: Option<String>,
 
-    /// Specify a sub-domain for this wormhole
+    /// Specify a sub-domain for this tunnel
     #[structopt(short = "s", long = "subdomain")]
     sub_domain: Option<String>,
 
@@ -77,14 +77,14 @@ impl Config {
         let (secret_key, sub_domain, local_port) = match opts.command {
             Some(SubCommand::SetAuth { key }) => {
                 let key = opts.key.unwrap_or(key);
-                let wormhole_dir = match dirs::home_dir().map(|h| h.join(SETTINGS_DIR)) {
+                let settings_dir = match dirs::home_dir().map(|h| h.join(SETTINGS_DIR)) {
                     Some(path) => path,
                     None => {
                         panic!("Could not find home directory to store token.")
                     }
                 };
-                std::fs::create_dir_all(&wormhole_dir).expect("Fail to create wormhole file in home directory");
-                std::fs::write(wormhole_dir.join(SECRET_KEY_FILE), key).expect("Failed to save authentication key file.");
+                std::fs::create_dir_all(&settings_dir).expect("Fail to create file in home directory");
+                std::fs::write(settings_dir.join(SECRET_KEY_FILE), key).expect("Failed to save authentication key file.");
 
                 eprintln!("Authentication key stored successfully!");
                 std::process::exit(0);
