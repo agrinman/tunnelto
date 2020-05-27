@@ -35,7 +35,7 @@ Or **Download a release for your target OS here**: [tunnelto/releases](https://g
 ```shell script
 tunnelto --port 8000
 ```
-The above command opens a tunnelto and starts tunneling traffic to `localhost:8000`.
+The above command opens a tunnel and forwards traffic to `localhost:8000`.
 
 ## More Options:
 ```shell script
