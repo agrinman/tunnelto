@@ -32,14 +32,14 @@ jobs:
 
       - uses: actions/checkout@v2
       - name: Build Client
-        run: cargo build --release --bin wormhole --verbose
+        run: cargo build --release --bin tunnelto --verbose
       - name: Compress
-        run: tar -czvf wormhole-${{ matrix.os }}.tar.gz target/release/wormhole
+        run: tar -czvf tunnelto-${{ matrix.os }}.tar.gz target/release/tunnelto
       - name: Upload Client Binary
         uses: actions/upload-artifact@v1
         with:
-          name: wormhole-${{ matrix.os }}
-          path: target/release/wormhole
+          name: tunnelto-${{ matrix.os }}
+          path: target/release/tunnelto
 
   build_win:
     runs-on: windows-latest
@@ -62,12 +62,12 @@ jobs:
 
       - uses: actions/checkout@v2
       - name: Build Client
-        run: cargo build --release --bin wormhole --verbose
+        run: cargo build --release --bin tunnelto --verbose
       - name: Upload Client Binary
         uses: actions/upload-artifact@v1
         with:
-          name: wormhole-windows-latest.exe
-          path: target/release/wormhole.exe
+          name: tunnelto-windows-latest.exe
+          path: target/release/tunnelto.exe
 
   publish:
     needs: [build, build_win]
@@ -80,33 +80,33 @@ jobs:
       - name: Download macOS
         uses: actions/download-artifact@v1
         with:
-          name: wormhole-macOS-latest
-          path: macOS/wormhole/${{ steps.get_version.outputs.VERSION }}/bin/
+          name: tunnelto-macOS-latest
+          path: macOS/tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/
 
       - name: Download ubuntu
         uses: actions/download-artifact@v1
         with:
-          name: wormhole-ubuntu-latest
+          name: tunnelto-ubuntu-latest
           path: linux/
 
       - name: Download windows
         uses: actions/download-artifact@v1
         with:
-          name: wormhole-windows-latest.exe
+          name: tunnelto-windows-latest.exe
           path: windows/
 
       - name: Compress
         run: |
-          chmod +x macOS/wormhole/${{ steps.get_version.outputs.VERSION }}/bin/wormhole
-          chmod +x linux/wormhole
+          chmod +x macOS/tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
+          chmod +x linux/tunnelto
           export TAG="${{ steps.get_version.outputs.VERSION }}"
-          tar -C windows/ -czvf wormhole-windows.tar.gz wormhole.exe
-          tar -C macOS/ -czvf "wormhole-$TAG.catalina.bottle.tar.gz" wormhole/${{ steps.get_version.outputs.VERSION }}/bin/wormhole
-          tar -C linux/ -czvf wormhole-linux.tar.gz wormhole
+          tar -C windows/ -czvf tunnelto-windows.tar.gz tunnelto.exe
+          tar -C macOS/ -czvf "tunnelto-$TAG.catalina.bottle.tar.gz" tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
+          tar -C linux/ -czvf tunnelto-linux.tar.gz tunnelto
 
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "wormhole-${{ steps.get_version.outputs.VERSION }}.catalina.bottle.tar.gz,wormhole-linux.tar.gz,wormhole-windows.tar.gz"
+          artifacts: "tunnelto-${{ steps.get_version.outputs.VERSION }}.catalina.bottle.tar.gz,tunnelto-linux.tar.gz,tunnelto-windows.tar.gz"
           token: ${{ secrets.GITHUB_TOKEN }}

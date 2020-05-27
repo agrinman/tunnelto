@@ -14,39 +14,37 @@ const SECRET_KEY_FILE:&'static str = "key.token";
 
 /// Command line arguments
 #[derive(Debug, StructOpt)]
-#[structopt(name = "wormhole", author="Alex Grinman <wormhole@alexgr.in>", about = "Expose your local web server to the internet with a public url.")]
+#[structopt(name = "tunnelto", author="Alex Grinman <alex@tunnelto.dev>", about = "Expose your local web server to the internet with a public url.")]
 struct Opts {
     /// A level of verbosity, and can be used multiple times
     #[structopt(short = "v", long = "verbose")]
     verbose: bool,
 
     #[structopt(subcommand)]
-    command: SubCommand,
+    command: Option<SubCommand>,
+
+    /// Sets an API authentication key to use for this wormhole
+    #[structopt(short = "k", long = "key")]
+    key: Option<String>,
+
+    /// Specify a sub-domain for this wormhole
+    #[structopt(short = "s", long = "subdomain")]
+    sub_domain: Option<String>,
+
+    /// Sets the port to forward incoming tunnel traffic to on localhost
+    #[structopt(short = "p", long = "port", default_value = "8000")]
+    port: String,
+
 }
 
 #[derive(Debug, StructOpt)]
 enum SubCommand {
     /// Store the API Authentication key
-    Auth {
+    SetAuth {
         /// Sets an API authentication key on disk for future use
         #[structopt(short = "k", long = "key")]
         key: String
     },
-
-    /// Start the wormhole
-    Start {
-        /// Sets an API authentication key to use for this wormhole
-        #[structopt(short = "k", long = "key")]
-        key: Option<String>,
-
-        /// Specify a sub-domain for this wormhole
-        #[structopt(short = "s", long = "subdomain")]
-        sub_domain: Option<String>,
-
-        /// Sets the port to forward incoming tunnel traffic to on localhost
-        #[structopt(short = "p", long = "port")]
-        port: String,
-    }
 }
 
 /// Config
@@ -69,15 +67,16 @@ impl Config {
         let opts: Opts = Opts::from_args();
 
         if opts.verbose {
-            std::env::set_var("RUST_LOG", "wormhole=debug");
+            std::env::set_var("RUST_LOG", "tunnelto=debug");
         } else {
-            std::env::set_var("RUST_LOG", "wormhole=error");
+            std::env::set_var("RUST_LOG", "tunnelto=error");
         }
 
         pretty_env_logger::init();
 
         let (secret_key, sub_domain, local_port) = match opts.command {
-            SubCommand::Auth { key } => {
+            Some(SubCommand::SetAuth { key }) => {
+                let key = opts.key.unwrap_or(key);
                 let wormhole_dir = match dirs::home_dir().map(|h| h.join(WORMHOLE_DIR)) {
                     Some(path) => path,
                     None => {
@@ -90,7 +89,11 @@ impl Config {
                 eprintln!("Authentication key stored successfully!");
                 std::process::exit(0);
             },
-            SubCommand::Start { key, sub_domain, port } => {
+            None => {
+                let key = opts.key;
+                let sub_domain = opts.sub_domain;
+                let port = opts.port;
+
                 (match key {
                     Some(key) => Some(key),
                     None => {

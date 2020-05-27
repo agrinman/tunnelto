@@ -16,7 +16,7 @@ mod local;
 mod config;
 mod introspect;
 
-pub use wormhole::*;
+pub use tunnelto::*;
 pub use config::*;
 
 use colour::*;
@@ -170,10 +170,10 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     };
 
     if config.first_run {
-        e_green_ln!("Welcome to wormhole!\n{}\n\n", include_str!("../../wormhole_ascii.txt"));
+        e_green_ln!("Initiating tunnel to port {}\n{}\n\n", config.local_port , include_str!("../../wormhole_ascii.txt"));
     }
 
-    e_dark_magenta!("Wormhole activated on: ");
+    e_dark_magenta!("Tunnel activated on: ");
     e_cyan_ln!("{}", config.activation_url(&sub_domain));
 
     Ok(websocket)

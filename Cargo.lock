@@ -1752,6 +1752,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "tunnelto"
+version = "0.1.6"
+dependencies = [
+ "base64 0.11.0",
+ "bytes",
+ "chrono",
+ "colour",
+ "dirs",
+ "futures",
+ "hex",
+ "hmac-sha256",
+ "httparse",
+ "human-panic",
+ "lazy_static",
+ "log 0.4.8",
+ "pretty_env_logger",
+ "rand 0.7.3",
+ "serde",
+ "serde_json",
+ "structopt",
+ "tokio",
+ "tokio-tungstenite",
+ "tungstenite",
+ "url",
+ "warp",
+]
+
+[[package]]
 name = "twoway"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1960,34 +1988,6 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
-
-[[package]]
-name = "wormhole-tunnel"
-version = "0.1.5"
-dependencies = [
- "base64 0.11.0",
- "bytes",
- "chrono",
- "colour",
- "dirs",
- "futures",
- "hex",
- "hmac-sha256",
- "httparse",
- "human-panic",
- "lazy_static",
- "log 0.4.8",
- "pretty_env_logger",
- "rand 0.7.3",
- "serde",
- "serde_json",
- "structopt",
- "tokio",
- "tokio-tungstenite",
- "tungstenite",
- "url",
- "warp",
-]
 
 [[package]]
 name = "ws2_32-sys"

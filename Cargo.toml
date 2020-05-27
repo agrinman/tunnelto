@@ -1,22 +1,22 @@
 [package]
-name = "wormhole-tunnel"
+name = "tunnelto"
 description = "expose your local web server to the internet with a public url"
-version = "0.1.5"
-authors = ["Alex Grinman <me@alexgr.in>"]
+version = "0.1.6"
+authors = ["Alex Grinman <alex@tunnelto.dev>"]
 edition = "2018"
 license = "MIT"
-repository = "https://github.com/agrinman/wormhole"
+repository = "https://tunnelto.dev"
 readme = "README.md"
 
 [lib]
-name = "wormhole"
+name = "tunnelto"
 
 [[bin]]
-name = "wormhole"
+name = "tunnelto"
 path = "src/client/main.rs"
 
 [[bin]]
-name = "wormhole_server"
+name = "tunnelto_server"
 path = "src/server/main.rs"
 
 [dependencies]

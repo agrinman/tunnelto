@@ -2,7 +2,7 @@ use futures::{StreamExt, SinkExt};
 use warp::{Filter};
 use warp::ws::{Ws, Message, WebSocket};
 
-pub use wormhole::*;
+pub use tunnelto::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
