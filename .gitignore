@@ -1,2 +1,3 @@
 /target
-wormhole_server
+tunnelto_server
+.env

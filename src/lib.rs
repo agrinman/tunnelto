@@ -1,25 +1,19 @@
 use rand::prelude::*;
 use serde::{Serialize, Deserialize};
 use serde::export::Formatter;
-use chrono::Utc;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(transparent)]
 pub struct SecretKey(pub String);
 impl SecretKey {
-    #[allow(unused)]
     pub fn generate() -> Self {
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut key);
-        Self(base64::encode_config(&key, base64::URL_SAFE_NO_PAD))
-    }
-
-    #[allow(unused)]
-    pub fn anonymous_key() -> Self {
-        let mut key = [0u8; 32];
-        Self(base64::encode_config(&key, base64::URL_SAFE_NO_PAD))
+        let mut rng = rand::thread_rng();
+        Self(std::iter::repeat(())
+            .map(|_| rng.sample(rand::distributions::Alphanumeric))
+            .take(22)
+            .collect::<String>())
     }
 }
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all="snake_case")]
 pub enum ServerHello {
@@ -48,61 +42,32 @@ impl ServerHello {
     }
 }
 
-const CLIENT_HELLO_TTL_SECONDS:i64 = 300;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientHello {
     pub id: ClientId,
     pub sub_domain: Option<String>,
+    pub client_type: ClientType
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClientHelloV1 {
+    pub id: ClientId,
+    pub sub_domain: Option<String>,
     pub is_anonymous: bool,
-    // epoch
     unix_seconds: i64,
-    //hex encoded
     signature: String,
 }
 
 impl ClientHello {
-    pub fn generate(id: ClientId, secret_key: &Option<SecretKey>, sub_domain: Option<String>) -> (Self, ClientId) {
-        let unix_seconds = Utc::now().timestamp();
-        let input = format!("{}", unix_seconds);
-        let signature = match secret_key {
-            Some(key) => hmac_sha256::HMAC::mac(input.as_bytes(), key.0.as_bytes()),
-            None => hmac_sha256::HMAC::mac(input.as_bytes(), SecretKey::anonymous_key().0.as_bytes()),
-        };
-
-        (ClientHello {
-            id: id.clone(), sub_domain, unix_seconds, signature: hex::encode(signature), is_anonymous: secret_key.is_none()
-        }, id)
+    pub fn generate(sub_domain: Option<String>, typ: ClientType) -> Self {
+        ClientHello { id: ClientId::generate(), client_type: typ, sub_domain}
     }
+}
 
-    #[allow(unused)]
-    pub fn verify(secret_key: &SecretKey, data: &[u8], allow_unknown: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        let client_hello:ClientHello = serde_json::from_slice(&data)?;
-
-        // check the time
-        if (Utc::now().timestamp() - client_hello.unix_seconds).abs() > CLIENT_HELLO_TTL_SECONDS {
-            return Err("Expired client hello".into())
-        }
-
-        // check that anonymous is allowed
-        if !allow_unknown && client_hello.is_anonymous {
-            return Err("Anonymous clients are not allowed".into())
-        }
-
-        let input = format!("{}", client_hello.unix_seconds);
-
-        let expected = if client_hello.is_anonymous {
-            hmac_sha256::HMAC::mac(input.as_bytes(), SecretKey::anonymous_key().0.as_bytes())
-        } else {
-            hmac_sha256::HMAC::mac(input.as_bytes(), secret_key.0.as_bytes())
-        };
-
-        if hex::encode(expected) != client_hello.signature {
-            return Err("Bad signature in client hello".into())
-        }
-
-        Ok(client_hello)
-    }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientType {
+    Auth { key: SecretKey },
+    Anonymous,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]

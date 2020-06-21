@@ -123,10 +123,14 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
-    let (client_hello, id) = ClientHello::generate(config.client_id.clone(),
-                                                   &config.secret_key,
-                                                   config.sub_domain.clone());
-    info!("connecting to wormhole as client {}", &id);
+    let typ = match config.secret_key.clone() {
+        Some(secret_key) => ClientType::Auth { key: secret_key },
+        None => ClientType::Anonymous,
+    };
+
+    let client_hello = ClientHello::generate(config.sub_domain.clone(), typ);
+
+    info!("connecting to wormhole as client {}", &client_hello.id);
 
     let hello = serde_json::to_vec(&client_hello).unwrap();
     websocket.send(Message::binary(hello)).await.expect("Failed to send client hello to wormhole server.");
