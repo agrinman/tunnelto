@@ -8,4 +8,4 @@ ENV RUST_BACKTRACE=1
 EXPOSE 5000
 EXPOSE 8080
 
-ENTRYPOINT ["/wormhole_server"]
+ENTRYPOINT ["/tunnelto_server"]

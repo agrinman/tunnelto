@@ -180,6 +180,10 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     e_dark_magenta!("Tunnel activated on: ");
     e_cyan_ln!("{}", config.activation_url(&sub_domain));
 
+    if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) && config.first_run {
+        e_yellow_ln!(">>> Notice: to access the full sub-domain feature, get your a free authentication key at https://dashboard.tunnelto.dev.");
+    }
+
     Ok(websocket)
 }
 
