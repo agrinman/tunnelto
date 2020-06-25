@@ -31,6 +31,7 @@ lazy_static! {
     pub static ref CONNECTIONS:Connections = Connections::new();
     pub static ref ACTIVE_STREAMS:ActiveStreams = Arc::new(RwLock::new(HashMap::new()));
     pub static ref ALLOWED_HOSTS:Vec<String> = allowed_host_suffixes();
+    pub static ref BLOCKED_SUB_DOMAINS:Vec<String> = blocked_sub_domains_suffixes();
     pub static ref AUTH_DB_SERVICE:AuthDbService = AuthDbService::new().expect("failed to init auth-service");
 }
 
@@ -39,6 +40,15 @@ lazy_static! {
 ///         foo.bar => *.foo.bar
 pub fn allowed_host_suffixes() -> Vec<String> {
     std::env::var("ALLOWED_HOSTS")
+        .map(|s| s.split(",").map(String::from).collect())
+        .unwrap_or(vec![])
+}
+
+
+/// What sub-domains do we always block:
+/// i.e:    dashboard.tunnelto.dev
+pub fn blocked_sub_domains_suffixes() -> Vec<String> {
+    std::env::var("BLOCKED_SUB_DOMAINS")
         .map(|s| s.split(",").map(String::from).collect())
         .unwrap_or(vec![])
 }

@@ -16,6 +16,8 @@ mod local;
 mod config;
 mod introspect;
 mod spinner;
+mod error;
+pub use self::error::*;
 
 pub use tunnelto::*;
 pub use config::*;
@@ -24,7 +26,6 @@ use std::time::Duration;
 use colored::Colorize;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
-type Error = Box<dyn std::error::Error>;
 
 lazy_static::lazy_static! {
     pub static ref ACTIVE_STREAMS:ActiveStreams = Arc::new(RwLock::new(HashMap::new()));
@@ -54,13 +55,20 @@ async fn main() {
         match result {
             futures::future::Either::Left((wormhole_result, _)) => {
                 if let Err(e) = wormhole_result {
-                    error!("wormhole error: {:?}", e);
+                    debug!("wormhole error: {:?}", e);
+                    match e {
+                        Error::WebSocketError(err) => {
+                            warn!("websocket error: {:?}..restarting", err);
+                            continue
+                        },
+                        _ => {}
+                    };
                     eprintln!("Error: {}", format!("{}", e).red());
-                    break
+                    return
                 }
             },
             _ => {},
-        }
+        };
 
         config.first_run = false;
         info!("restarting wormhole");
@@ -146,40 +154,25 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     websocket.send(Message::binary(hello)).await.expect("Failed to send client hello to wormhole server.");
 
     // wait for Server hello
-    let sub_domain = match websocket.next().await.map(|d| d
-        .map_err(|e| format!("websocket read error: {:?}", e) )
-        .map(|m| serde_json::from_slice::<ServerHello>(&m.into_data()))
-    )
-    {
-        Some(Ok(Ok(server_response))) => {
-            match server_response {
-                ServerHello::Success{ sub_domain } => {
-                    info!("Server accepted our connection.");
-                    sub_domain
-                },
-                ServerHello::AuthFailed => {
-                    error!("The server denied our authentication token.");
-                    return Err("Authentication failed. Check your authentication key.")?;
-                },
-                ServerHello::InvalidSubDomain =>{
-                    return Err("Invalid sub-domain specified")?;
-                }
-                ServerHello::SubDomainInUse => {
-                    error!("Sub-domain already in use");
-                    return Err("Cannot use this sub-domain, it is already taken.")?
-                }
-            }
-        }
-        Some(Ok(Err(e))) => {
-            error!("invalid server hello: {:?}", e);
-            return Err("connection failed.")?;
+    let server_hello_data = websocket.next().await.ok_or(Error::NoResponseFromServer)??.into_data();
+    let server_hello = serde_json::from_slice::<ServerHello>(&server_hello_data).map_err(|e| {
+        error!("Couldn't parse server_hello from {:?}", e);
+        Error::ServerReplyInvalid
+    })?;
+
+    let sub_domain = match server_hello {
+        ServerHello::Success{ sub_domain } => {
+            info!("Server accepted our connection.");
+            sub_domain
         },
-        Some(Err(e)) => {
-            error!("websocket error: {:?}", e);
-            return Err("connection failed.")?;
+        ServerHello::AuthFailed => {
+            return Err(Error::AuthenticationFailed);
+        },
+        ServerHello::InvalidSubDomain =>{
+            return Err(Error::InvalidSubDomain);
         }
-        None => {
-            return Err("Empty reply from server. Unknown failure to connect to server.")?
+        ServerHello::SubDomainInUse => {
+            return Err(Error::SubDomainInUse);
         }
     };
 
