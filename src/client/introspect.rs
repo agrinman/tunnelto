@@ -1,12 +1,12 @@
 pub use super::StreamId;
-use colour::*;
 use log::{debug};
 
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
+use colored::Colorize;
 
 pub fn connect_failed() {
-    e_red_ln!("CONNECTION REFUSED")
+    eprintln!("{}", "CONNECTION REFUSED".red())
 }
 
 #[derive(Debug, Clone)]
@@ -61,18 +61,20 @@ pub fn log_outgoing(stream_id: StreamId, data: Vec<u8>) {
 
     let _ = resp.parse(&data).map_err(|e| debug!("error parsing response: {:?}", e));
 
-    match resp.code {
+    let out = match resp.code {
         Some(code @ 200..=299) => {
-            e_green!("{}", code );
+            format!("{}", code).green()
         }
         Some(code) => {
-            e_red!("{}", code);
+            format!("{}", code).red()
         }
         _ => {
-            e_red!("???");
+            "???".red()
         }
     };
 
-    e_blue!("\t\t{} {}\n", log.method.to_uppercase(), log.path);
+    eprint!("{}", out);
+
+    eprintln!("\t\t{}\t{}", log.method.to_uppercase().yellow(), log.path.blue());
     logs.remove(&stream_id);
 }

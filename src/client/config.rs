@@ -58,6 +58,7 @@ pub struct Config {
     pub secret_key: Option<SecretKey>,
     pub tls_off: bool,
     pub first_run: bool,
+    pub verbose: bool,
 }
 
 impl Config {
@@ -68,8 +69,6 @@ impl Config {
 
         if opts.verbose {
             std::env::set_var("RUST_LOG", "tunnelto=debug");
-        } else {
-            std::env::set_var("RUST_LOG", "tunnelto=error");
         }
 
         pretty_env_logger::init();
@@ -136,6 +135,7 @@ impl Config {
             host,
             local_port,
             sub_domain,
+            verbose: opts.verbose,
             secret_key: secret_key.map(|s| SecretKey(s)),
             tls_off,
             first_run: true,
@@ -143,9 +143,14 @@ impl Config {
     }
 
     pub fn activation_url(&self, server_chosen_sub_domain: &str) -> String {
-        format!("{}://{}.{}",
+        format!("{}://{}",
                   if self.tls_off { "http" } else { "https" },
-                  &server_chosen_sub_domain,
-                  &self.host)
+                  self.activation_host(server_chosen_sub_domain))
+    }
+
+    pub fn activation_host(&self, server_chosen_sub_domain: &str) -> String {
+        format!("{}.{}",
+                &server_chosen_sub_domain,
+                &self.host)
     }
 }

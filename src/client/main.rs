@@ -15,12 +15,13 @@ use std::env;
 mod local;
 mod config;
 mod introspect;
+mod spinner;
 
 pub use tunnelto::*;
 pub use config::*;
 
-use colour::*;
 use std::time::Duration;
+use colored::Colorize;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
 type Error = Box<dyn std::error::Error>;
@@ -53,8 +54,9 @@ async fn main() {
         match result {
             futures::future::Either::Left((wormhole_result, _)) => {
                 if let Err(e) = wormhole_result {
-                    e_red_ln!("Error: {:?}", e);
-                    return
+                    error!("wormhole error: {:?}", e);
+                    eprintln!("Error: {}", format!("{}", e).red());
+                    break
                 }
             },
             _ => {},
@@ -120,6 +122,14 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Re
 }
 
 async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
+    let spinner = if config.first_run {
+        eprintln!("{}\n\n", format!("{}", include_str!("../../wormhole_ascii.txt")).green());
+        Some(spinner::new_spinner("initializing remote tunnel, please stand by"))
+    } else {
+        None
+    };
+
+
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
@@ -144,19 +154,19 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
         Some(Ok(Ok(server_response))) => {
             match server_response {
                 ServerHello::Success{ sub_domain } => {
-                    info!("server accepted our connection.");
+                    info!("Server accepted our connection.");
                     sub_domain
                 },
                 ServerHello::AuthFailed => {
-                    error!("server denied our authentication token.");
+                    error!("The server denied our authentication token.");
                     return Err("Authentication failed. Check your authentication key.")?;
                 },
                 ServerHello::InvalidSubDomain =>{
                     return Err("Invalid sub-domain specified")?;
                 }
                 ServerHello::SubDomainInUse => {
-                    error!("sub-domain already in use");
-                    return Err("Cannot use this sub-domain, it's already taken.")?
+                    error!("Sub-domain already in use");
+                    return Err("Cannot use this sub-domain, it is already taken.")?
                 }
             }
         }
@@ -173,16 +183,21 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
         }
     };
 
-    if config.first_run {
-        e_green_ln!("Initiating tunnel to port {}\n{}\n\n", config.local_port , include_str!("../../wormhole_ascii.txt"));
+    // either first run or the tunnel changed domains
+    // Note: the latter should rarely occur.
+    if config.first_run || config.sub_domain.as_ref() != Some(&sub_domain) {
+        if let Some(pb) = spinner {
+            pb.finish_with_message(&format!("Success! Remote tunnel created on: {}", &config.activation_url(&sub_domain).bold().green()));
+        }
+
+        if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) {
+            eprintln!("{}",
+                      ">>> Notice: to access the full sub-domain feature, get your a free authentication key at https://dashboard.tunnelto.dev.".yellow());
+        }
+        eprintln!("{} Forwarding to localhost:{}\n", "=>".green(), config.local_port.yellow());
     }
 
-    e_dark_magenta!("Tunnel activated on: ");
-    e_cyan_ln!("{}", config.activation_url(&sub_domain));
 
-    if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) && config.first_run {
-        e_yellow_ln!(">>> Notice: to access the full sub-domain feature, get your a free authentication key at https://dashboard.tunnelto.dev.");
-    }
 
     Ok(websocket)
 }
