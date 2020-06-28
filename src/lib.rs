@@ -113,7 +113,7 @@ pub enum ControlPacket {
     Ping,
 }
 
-pub const PING_INTERVAL:u64 = 4;
+pub const PING_INTERVAL:u64 = 1;
 
 const EMPTY_STREAM:StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
@@ -124,7 +124,7 @@ impl ControlPacket {
             ControlPacket::Data(sid, data) => [vec![0x02], sid.0.to_vec(), data].concat(),
             ControlPacket::Refused(sid) => [vec![0x03], sid.0.to_vec()].concat(),
             ControlPacket::End(sid) =>  [vec![0x04], sid.0.to_vec()].concat(),
-            ControlPacket::Ping => [vec![0x05], EMPTY_STREAM.0.to_vec()].concat()
+            ControlPacket::Ping => [vec![0x05], EMPTY_STREAM.0.to_vec()].concat(),
         }
     }
 

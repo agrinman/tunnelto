@@ -18,8 +18,10 @@ async fn handle_new_connection(websocket: WebSocket) {
         None => return,
     };
 
+    log::debug!("open tunnel: {}.", &sub_domain);
+
     let (tx, rx) = unbounded::<ControlPacket>();
-    let client = ConnectedClient { id: client_id, host: sub_domain, tx };
+    let mut client = ConnectedClient { id: client_id, host: sub_domain, tx };
     Connections::add(client.clone());
 
     let  (sink, stream) = websocket.split();
@@ -30,8 +32,27 @@ async fn handle_new_connection(websocket: WebSocket) {
         tunnel_client(client_clone, sink, rx).await;
     });
 
+    let client_clone = client.clone();
+
     tokio::spawn(async move {
-        process_client_messages(client, stream).await;
+        process_client_messages(client_clone, stream).await;
+    });
+
+    // play ping pong
+    tokio::spawn(async move {
+        loop {
+            log::trace!("sending ping");
+            match client.tx.send(ControlPacket::Ping).await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::trace!("Failed to send ping: {:?}, removing client", e);
+                    Connections::remove(&client);
+                    return
+                }
+            };
+
+            tokio::time::delay_for(Duration::new(PING_INTERVAL, 0)).await;
+        }
     });
 }
 
@@ -101,15 +122,9 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 continue
             },
             ControlPacket::Ping => {
-                log::info!("got ping");
-
-                let mut tx = client.tx.clone();
-                tokio::spawn(async move {
-                    tokio::time::delay_for(Duration::new(PING_INTERVAL, 0)).await;
-                    let _ = tx.send(ControlPacket::Ping).await;
-                });
+                log::info!("pong");
                 continue
-            }
+            },
         };
 
         let stream = ACTIVE_STREAMS.read().unwrap().get(&stream_id).cloned();

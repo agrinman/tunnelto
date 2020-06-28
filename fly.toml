@@ -1,12 +1,14 @@
-app = "blackhole"
+# fly.toml file generated for tunnelto on 2020-06-30T19:24:55-04:00
+
+app = "tunnelto"
 
 [[services]]
   internal_port = 5000
   protocol = "tcp"
 
   [services.concurrency]
-    hard_limit = 100
-    soft_limit = 100
+    hard_limit = 99999
+    soft_limit = 99998
 
   [[services.ports]]
     handlers = ["tls", "http"]
@@ -17,7 +19,7 @@ app = "blackhole"
     method = "get"
     path = "/health_check"
     protocol = "http"
-    timeout = 2000
+    timeout = 20000
 
 [[services]]
   internal_port = 8080
@@ -28,10 +30,6 @@ app = "blackhole"
     soft_limit = 99998
 
   [[services.ports]]
-    handlers = ["http"]
-    port = "80"
-
-  [[services.ports]]
     handlers = ["tls", "http"]
     port = "443"
 
@@ -40,4 +38,4 @@ app = "blackhole"
     method = "get"
     path = "/0xDEADBEEF_HEALTH_CHECK"
     protocol = "http"
-    timeout = 2000
+    timeout = 20000

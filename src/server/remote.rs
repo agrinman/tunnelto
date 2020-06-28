@@ -1,4 +1,30 @@
 use super::*;
+use tokio::net::TcpStream;
+use tokio::io::{ReadHalf, WriteHalf};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+async fn direct_to_control(mut incoming: TcpStream) {
+    let mut control_socket = match TcpStream::connect("localhost:5000").await {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("failed to connect to local control server {:?}", e);
+            return
+        }
+    };
+
+    let (mut control_r, mut control_w) = control_socket.split();
+    let (mut incoming_r, mut incoming_w) = incoming.split();
+
+    let join_1 = tokio::io::copy(&mut control_r, &mut incoming_w);
+    let join_2 = tokio::io::copy(&mut incoming_r, &mut control_w);
+
+    match futures::future::join(join_1, join_2).await {
+        (Ok(_), Ok(_)) => {},
+        (Err(e), _) | (_, Err(e)) => {
+            log::error!("directing stream to control failed: {:?}", e);
+        },
+    }
+}
 
 pub async fn accept_connection(socket: TcpStream) {
     // peek the host of the http request
@@ -23,6 +49,12 @@ pub async fn accept_connection(socket: TcpStream) {
             return
         }
     };
+
+    // Special case -- we redirect this tcp connection to the control server
+    if host.as_str() == "wormhole" {
+        direct_to_control(socket).await;
+        return
+    }
 
     // find the client listening for this host
     let client = match Connections::find_by_host(&host) {
@@ -83,7 +115,7 @@ fn validate_host_prefix(host: &str) -> Option<String> {
 }
 
 /// Response Constants
-const HTTP_REDIRECT_RESPONSE:&'static [u8] = b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://alexgr.in/\r\nContent-Length: 17\r\n\r\nhttps://alexgr.in";
+const HTTP_REDIRECT_RESPONSE:&'static [u8] = b"HTTP/1.1 301 Moved Permanently\r\nLocation: https://tunnelto.dev/\r\nContent-Length: 20\r\n\r\nhttps://tunnelto.dev";
 const HTTP_INVALID_HOST_RESPONSE:&'static [u8] = b"HTTP/1.1 400\r\nContent-Length: 23\r\n\r\nError: Invalid Hostname";
 const HTTP_NOT_FOUND_RESPONSE:&'static [u8] = b"HTTP/1.1 400\r\nContent-Length: 23\r\n\r\nError: Tunnel Not Found";
 const HTTP_TUNNEL_REFUSED_RESPONSE:&'static [u8] = b"HTTP/1.1 500\r\nContent-Length: 32\r\n\r\nTunnel says: connection refused.";
@@ -93,11 +125,13 @@ const HEALTH_CHECK_PATH:&'static [u8] = b"/0xDEADBEEF_HEALTH_CHECK";
 /// Filter incoming remote streams
 async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, String)> {
     /// Note we return out if the host header is not found
-    /// within the first 4kb of the request.
+    /// within the first 1kb of the request.
     const MAX_HEADER_PEAK:usize = 1024;
-    let mut buf = vec![0; MAX_HEADER_PEAK]; //4kb
+    let mut buf = vec![0; MAX_HEADER_PEAK]; //1kb
 
     loop {
+        log::debug!("checking stream headers");
+
         let n = match socket.peek(&mut buf).await {
             Ok(n) => n,
             Err(e) => {
@@ -106,7 +140,14 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
             },
         };
 
-        let mut headers = [httparse::EMPTY_HEADER; 30]; // 30 seems like a generous # of headers
+        if n == 0 {
+            log::debug!("unable to peek header bytes");
+            return None;
+        }
+
+        log::debug!("peeked {} stream bytes ", n);
+
+        let mut headers = [httparse::EMPTY_HEADER; 64]; // 30 seems like a generous # of headers
         let mut req = httparse::Request::new(&mut headers);
 
         if let Err(e) = req.parse(&buf[..n]) {
@@ -147,7 +188,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
     control_server::send_client_stream_init(tunnel_stream.clone()).await;
 
     // now read from stream and forward to clients
-    let mut buf = [0; 16*1024];
+    let mut buf = [0; 1024];
 
     loop {
         // client is no longer connected

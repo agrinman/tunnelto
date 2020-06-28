@@ -6,9 +6,7 @@ pub use tunnelto::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::io::{ReadHalf, WriteHalf};
+use tokio::net::{TcpListener};
 
 use futures::stream::{SplitSink, SplitStream};
 use futures::channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
@@ -56,12 +54,15 @@ pub fn blocked_sub_domains_suffixes() -> Vec<String> {
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
-    info!("starting wormhole server");
 
+    info!("starting wormhole server");
     control_server::spawn(([0,0,0,0], 5000));
 
+    let listen_addr = format!("0.0.0.0:{}", std::env::var("PORT").unwrap_or("8080".to_string()));
+    info!("listening on: {}", &listen_addr);
+
     // create our accept any server
-    let mut listener = TcpListener::bind("0.0.0.0:8080").await.expect("failed to bind");
+    let mut listener = TcpListener::bind(listen_addr).await.expect("failed to bind");
 
     loop {
         let socket = match listener.accept().await {

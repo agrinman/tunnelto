@@ -83,7 +83,7 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Re
     let (mut ws_sink, mut ws_stream) = websocket.split();
 
     // tunnel channel
-    let (mut tunnel_tx, mut tunnel_rx) = unbounded::<ControlPacket>();
+    let (tunnel_tx, mut tunnel_rx) = unbounded::<ControlPacket>();
 
     // continuously write to websocket tunnel
     tokio::spawn(async move {
@@ -106,7 +106,7 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Re
     });
 
     // kick off the pings
-    let _ = tunnel_tx.send(ControlPacket::Ping).await;
+    // let _ = tunnel_tx.send(ControlPacket::Ping).await;
 
     // continuously read from websocket tunnel
     loop {
@@ -204,12 +204,7 @@ async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedS
         },
         ControlPacket::Ping => {
             log::info!("got ping");
-
-            let mut tx = tunnel_tx.clone();
-            tokio::spawn(async move {
-                tokio::time::delay_for(Duration::new(PING_INTERVAL, 0)).await;
-                let _ = tx.send(ControlPacket::Ping).await;
-            });
+            let _ = tunnel_tx.send(ControlPacket::Ping).await;
         },
         ControlPacket::Refused(_) => {
             return Err("unexpected control packet".into())

@@ -28,6 +28,8 @@ impl Connections {
         hosts.remove(&client.host);
         connected.remove(&client.id);
 
+        log::debug!("rm client: {}", &client.id);
+
         // drop all the streams
         // if there are no more tunnel clients
         if connected.is_empty() {
