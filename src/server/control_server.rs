@@ -45,7 +45,7 @@ async fn handle_new_connection(websocket: WebSocket) {
             match client.tx.send(ControlPacket::Ping).await {
                 Ok(_) => {},
                 Err(e) => {
-                    log::trace!("Failed to send ping: {:?}, removing client", e);
+                    log::debug!("Failed to send ping: {:?}, removing client", e);
                     Connections::remove(&client);
                     return
                 }
@@ -122,7 +122,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 continue
             },
             ControlPacket::Ping => {
-                log::info!("pong");
+                log::trace!("pong");
                 continue
             },
         };
