@@ -9,10 +9,10 @@ use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
 use crate::introspect;
 
 /// Establish a new local stream and start processing messages to it
-pub async fn setup_new_stream(local_port: &str, mut tunnel_tx: UnboundedSender<ControlPacket>, stream_id: StreamId) {
+pub async fn setup_new_stream(local_port: u16, mut tunnel_tx: UnboundedSender<ControlPacket>, stream_id: StreamId) {
     info!("setting up local stream: {}", &stream_id.to_string());
 
-    let local_tcp = match TcpStream::connect(format!("localhost:{}", &local_port)).await {
+    let local_tcp = match TcpStream::connect(format!("localhost:{}", local_port)).await {
         Ok(s) => s,
         Err(e) => {
             warn!("failed to connect to local service: {:?}", e);
@@ -39,7 +39,7 @@ pub async fn setup_new_stream(local_port: &str, mut tunnel_tx: UnboundedSender<C
 }
 
 pub async fn process_local_tcp(mut stream: ReadHalf<TcpStream>, mut tunnel: UnboundedSender<ControlPacket>, stream_id: StreamId) {
-    let mut buf = [0; 16*1024];
+    let mut buf = [0; 4*1024];
 
     loop {
         let n = stream.read(&mut buf).await.expect("failed to read data from socket");

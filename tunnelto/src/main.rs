@@ -19,11 +19,12 @@ mod spinner;
 mod error;
 pub use self::error::*;
 
-pub use tunnelto::*;
+pub use tunnelto_lib::*;
 pub use config::*;
 
 use std::time::Duration;
 use colored::Colorize;
+use crate::introspect::IntrospectionAddrs;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
 
@@ -47,9 +48,11 @@ async fn main() {
         Err(_) => return,
     };
 
+    let introspect_addrs = introspect::start_introspection_server(config.clone());
+
     loop {
         let (restart_tx, mut restart_rx) = unbounded();
-        let wormhole = run_wormhole(config.clone(), restart_tx);
+        let wormhole = run_wormhole(config.clone(), introspect_addrs.clone(), restart_tx);
         let result = futures::future::select(Box::pin(wormhole), restart_rx.next()).await;
 
         match result {
@@ -76,8 +79,12 @@ async fn main() {
 }
 
 /// Setup the tunnel to our control server
-async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Result<(), Error> {
+async fn run_wormhole(config: Config, introspect: IntrospectionAddrs, mut restart_tx: UnboundedSender<()>) -> Result<(), Error> {
     let websocket = connect_to_wormhole(&config).await?;
+
+    if config.first_run {
+        eprintln!("Local Inspect Dashboard: {}{}", "http://localhost:".yellow(), introspect.web_explorer_address.port());
+    }
 
     // split reading and writing
     let (mut ws_sink, mut ws_stream) = websocket.split();
@@ -112,7 +119,7 @@ async fn run_wormhole(config: Config, mut restart_tx: UnboundedSender<()>) -> Re
     loop {
         match ws_stream.next().await {
             Some(Ok(message)) => {
-                if let Err(e) = process_control_flow_message(&config, tunnel_tx.clone(), message.into_data()).await {
+                if let Err(e) = process_control_flow_message(&introspect, tunnel_tx.clone(), message.into_data()).await {
                     error!("Malformed protocol control packet: {:?}", e);
                     return Ok(())
                 }
@@ -195,7 +202,7 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     Ok(websocket)
 }
 
-async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let control_packet = ControlPacket::deserialize(&payload)?;
 
     match control_packet {
@@ -228,7 +235,7 @@ async fn process_control_flow_message(config: &Config, mut tunnel_tx: UnboundedS
             info!("stream[{:?}] -> new data: {:?}", stream_id.to_string(), data.len());
 
             if !ACTIVE_STREAMS.read().unwrap().contains_key(&stream_id) {
-                local::setup_new_stream(&config.local_port, tunnel_tx.clone(), stream_id.clone()).await;
+                local::setup_new_stream(introspect.forward_address.port(), tunnel_tx.clone(), stream_id.clone()).await;
             }
 
             // find the right stream

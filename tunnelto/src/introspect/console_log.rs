@@ -1,4 +1,4 @@
-pub use super::StreamId;
+use super::StreamId;
 use log::{debug};
 
 use std::sync::{Arc, RwLock};
@@ -24,7 +24,7 @@ pub fn log_incoming(stream_id: StreamId, data: Vec<u8>) {
         return
     }
 
-    let mut headers = [httparse::EMPTY_HEADER; 30];
+    let mut headers = [httparse::EMPTY_HEADER; 64];
     let mut req = httparse::Request::new(&mut headers);
 
     let (method, path) = match req.parse(&data) {
