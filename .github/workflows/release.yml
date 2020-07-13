@@ -100,7 +100,7 @@ jobs:
           chmod +x macOS/tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
           chmod +x linux/tunnelto
           export TAG="${{ steps.get_version.outputs.VERSION }}"
-          tar -C windows/ -czvf tunnelto-windows.tar.gz tunnelto.exe
+          mv -C windows/tunnelto.exe tunnelto-windows.exe
           tar -C macOS/ -czvf "tunnelto-$TAG.catalina.bottle.tar.gz" tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
           tar -C linux/ -czvf tunnelto-linux.tar.gz tunnelto
 
@@ -108,5 +108,5 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
-          artifacts: "tunnelto-${{ steps.get_version.outputs.VERSION }}.catalina.bottle.tar.gz,tunnelto-linux.tar.gz,tunnelto-windows.tar.gz"
+          artifacts: "tunnelto-${{ steps.get_version.outputs.VERSION }}.catalina.bottle.tar.gz,tunnelto-linux.tar.gz,tunnelto-windows.exe"
           token: ${{ secrets.GITHUB_TOKEN }}

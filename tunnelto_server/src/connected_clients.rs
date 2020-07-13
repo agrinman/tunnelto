@@ -20,6 +20,10 @@ impl Connections {
         }
     }
 
+    pub fn update_host(client: &ConnectedClient) {
+        CONNECTIONS.hosts.write().unwrap().insert(client.host.clone(), client.clone());
+    }
+    
     pub fn remove(client: &ConnectedClient) {
         client.tx.close_channel();
         let mut connected = CONNECTIONS.clients.write().unwrap();
