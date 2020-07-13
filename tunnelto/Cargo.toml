@@ -5,7 +5,7 @@ version = "0.1.10"
 authors = ["Alex Grinman <alex@tunnelto.dev>"]
 edition = "2018"
 license = "MIT"
-repository = "https://tunnelto.dev"
+repository = "https://github.com/agrinman/tunnelto"
 readme = "../README.md"
 
 [[bin]]
