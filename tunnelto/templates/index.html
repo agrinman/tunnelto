@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <a class="button is-fullwidth is-primary is-outlined  has-text-centered" href="/">
+            <span class="icon is-small">
+                <i class="fas fa-sync-alt"></i>
+            </span>
+        <span class="has-text-weight-bold">Load new data</span>
+    </a>
+    {% if requests.is_empty() %}
+    <p class="is-size-6 has-text-centered has-text-white is-family-code mb-4 mt-4">No requests yet</p>
+    {% else %}
+    <div class="table-container mt-4">
+        <table class="table with-lightgray-border is-striped is-hoverable is-fullwidth">
+            <thead class="has-text-left is-size-7">
+            <th class="">Time Start</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>IN</th>
+            <th>OUT</th>
+            <th></th>
+            </thead>
+            <tbody>
+            {% for r in requests %}
+            <tr class="is-family-code">
+                <td class="is-narrow is-family-code">
+                    <a class="is-link is-info" href="/detail/{{r.id}}">
+                        <span class="has-text-weight-light">{{r.completed.format("%H:%M:%S")}}</span>
+                    </a>
+                </td>
+                <td class="is-narrow is-family-code">
+                    <span class="has-text-weight-light">{{r.elapsed() }}</span>
+                </td>
+                <td class="is-narrow has-text-weight-bold">
+                    {% if r.status >= 200 && r.status < 300 %}
+                    <span class="has-text-success">{{r.status}}</span>
+                    {% elseif r.status >= 300 && r.status < 400 %}
+                    <span class="has-text-info">{{r.status}}</span>
+                    {% elseif r.status >= 400 && r.status < 500 %}
+                    <span class="has-text-warning-dark">{{r.status}}</span>
+                    {% elseif r.status >= 500 %}
+                    <span class="has-text-danger">{{r.status}}</span>
+                    {% else %}
+                    <span class="">{{r.status}}</span>
+                    {% endif %}
+                </td>
+                <td class="is-narrow is-family-code is-uppercase">
+                    <span class="has-text-weight-bold">{{r.method}}</span>
+                </td>
+                <td>
+                    <span class="is-family-code">{{r.path}}</span>
+                </td>
+                <td class="is-narrow">
+                    <span class="">{{r.body_data.len()/1024}} KB</span>
+                </td>
+                <td class="is-narrow">
+                    <span class="">{{r.response_data.len() / 1024}} KB</span>
+                </td>
+                <td class="is-narrow">
+                    <a class="is-link is-info" href="/detail/{{r.id}}">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-info-circle"></i>
+                                    </span>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+{% endblock %}

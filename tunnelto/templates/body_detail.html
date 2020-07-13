@@ -1,0 +1,79 @@
+<style>
+    #{{prefix}}-tab-content div {
+        display: none;
+    }
+    #{{prefix}}-tab-content div.is-active {
+        display: block;
+    }
+</style>
+
+<div id="{{prefix}}-tabs" class="mb-0 tabs is-boxed has-text-primary">
+    <ul>
+        <li data-tab="1" class="is-active">
+            <a>
+                <span>Text</span>
+            </a>
+        </li>
+        {% match body.data_type %}
+        {% when DataType::Json %}
+        <li data-tab="2">
+            <a>
+                <span>JSON</span>
+            </a>
+        </li>
+        {% when DataType::Unknown %}
+        {% endmatch %}
+    </ul>
+</div>
+<div id="{{prefix}}-tab-content" class="mt-0 mb-6 is-size-7">
+    <div class="is-active px-4 py-4 has-background-dark with-radius-bottom has-text-white-ter is-family-code" data-content="1">
+        <p class="" style="overflow-x: scroll;">{{ body.raw }}</p>
+    </div>
+    <div style="overflow-x: scroll" class=" px-4 py-4 has-background-dark with-radius-bottom has-text-white-ter is-family-code" data-content="2">
+        {% match body.content %}
+        {% when Some with (contents) %}
+        {{ contents|linebreaks|safe }}
+        {% when None %}
+        {% endmatch %}
+    </div>
+</div>
+
+<script>
+    const {{prefix}}_TABS = [...document.querySelectorAll('#{{prefix}}-tabs li')];
+    const {{prefix}}_CONTENT = [...document.querySelectorAll('#{{prefix}}-tab-content div')];
+    const {{prefix}}_ACTIVE_CLASS = 'is-active';
+
+    function initTabs() {
+        {{prefix}}_TABS.forEach((tab) => {
+            tab.addEventListener('click', (e) => {
+                let selected = tab.getAttribute('data-tab');
+                updateActiveTab(tab);
+                updateActiveContent(selected);
+            })
+        })
+    }
+
+    function updateActiveTab(selected) {
+        {{prefix}}_TABS.forEach((tab) => {
+            if (tab && tab.classList.contains({{prefix}}_ACTIVE_CLASS)) {
+                tab.classList.remove({{prefix}}_ACTIVE_CLASS);
+            }
+        });
+        selected.classList.add({{prefix}}_ACTIVE_CLASS);
+    }
+
+    function updateActiveContent(selected) {
+        {{prefix}}_CONTENT.forEach((item) => {
+            if (item && item.classList.contains({{prefix}}_ACTIVE_CLASS)) {
+                item.classList.remove({{prefix}}_ACTIVE_CLASS);
+            }
+            let data = item.getAttribute('data-content');
+            if (data === selected) {
+                item.classList.add({{prefix}}_ACTIVE_CLASS);
+            }
+        });
+    }
+
+    initTabs();
+
+</script>

@@ -1,0 +1,24 @@
+<div class="table-container">
+    <table class="table is-striped is-hoverable is-fullwidth is-size-7">
+        <thead class="has-text-left is-size-7">
+            <th>Header Name</th>
+            <th>Header Values</th>
+        </thead>
+        <tbody>
+        {% for (name, values) in headers %}
+            <tr class="is-family-code">
+            <td class="is-narrow is-family-code">
+                <span class="has-text-weight-light">{{name}}</span>
+            </td>
+            {% for value in values %}
+            <td class="is-family-code">
+                <span class="has-text-weight-light">{{ value }}</span>
+            </td>
+            {% endfor %}
+
+        </tr>
+        {% endfor %}
+
+        </tbody>
+    </table>
+</div>

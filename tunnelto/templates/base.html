@@ -31,50 +31,7 @@
         </div>
     </section>
     <section class="section">
-        {% if requests.is_empty() %}
-        <p class="is-size-6 has-text-centered has-text-white is-family-code mb-4">No requests yet</p>
-        {% else %}
-        <div class="table-container px-2">
-            <table class="table with-lightgray-border is-hoverable is-fullwidth">
-                <thead class="has-text-left">
-                <th class="">
-                    Timestamp
-                </th>
-                <th>Status</th>
-                <th>Method</th>
-                <th>Path</th>
-                <th>Req.</th>
-                <th>Resp.</th>
-                </thead>
-                <tbody>
-                {% for r in requests %}
-                <tr>
-                    <td class="is-narrow">
-                        <span class="">{{r.timestamp}}</span>
-                    </td>
-                    <td class="is-narrow has-text-weight-bold">
-                        <span class="">{{r.status}}</span>
-                    </td>
-                    <td class="is-narrow is-family-code is-uppercase">
-                        <span class="">{{r.method}}</span>
-                    </td>
-                    <td>
-                        <span class="is-family-code">{{r.path}}</span>
-                    </td>
-                    <td class="is-narrow">
-                        <span class="">{{r.body_data.len()/1024}} KB</span>
-                    </td>
-                    <td class="is-narrow">
-                        <span class="">{{r.response_data.len() / 1024}} KB</span>
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endif %}
-
-
+        {% block content %}{% endblock %}
     </section>
 </body>
 </html>

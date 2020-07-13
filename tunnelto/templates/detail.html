@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<a class="is-link has-text-primary" href="/">
+    <span class="icon is-small">
+      <i class="fas fa-chevron-left"></i>
+    </span>
+    <span>Go Back</span>
+</a>
+
+<div class="container box mt-4">
+    <div class="table-container px-2">
+        <table class="table is-striped is-hoverable is-fullwidth">
+            <thead class="has-text-left is-size-7">
+            <th class="">Time Start</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>IN</th>
+            <th>OUT</th>
+            <th></th>
+            </thead>
+            <tbody>
+            <tr class="is-family-code">
+                <td class="is-narrow is-family-code">
+                    <span class="has-text-weight-light">{{request.completed.format("%H:%M:%S")}}</span>
+                </td>
+                <td class="is-narrow is-family-code">
+                    <span class="has-text-weight-light">{{request.elapsed() }}</span>
+                </td>
+
+                <td class="is-narrow has-text-weight-bold">
+                    {% if request.status >= 200 && request.status < 300 %}
+                    <span class="has-text-success">{{request.status}}</span>
+                    {% elseif request.status >= 300 && request.status < 400 %}
+                    <span class="has-text-info">{{request.status}}</span>
+                    {% elseif request.status >= 400 && request.status < 500 %}
+                    <span class="has-text-warning-dark">{{request.status}}</span>
+                    {% elseif request.status >= 500 %}
+                    <span class="has-text-danger">{{request.status}}</span>
+                    {% else %}
+                    <span class="">{{request.status}}</span>
+                    {% endif %}
+                </td>
+                <td class="is-narrow is-family-code is-uppercase">
+                    <span class="has-text-weight-bold">{{request.method}}</span>
+                </td>
+                <td>
+                    <span class="is-family-code">{{request.path}}</span>
+                </td>
+                <td class="is-narrow">
+                    <span class="">{{request.body_data.len()/1024}} KB</span>
+                </td>
+                <td class="is-narrow">
+                    <span class="">{{request.response_data.len() / 1024}} KB</span>
+                </td>
+                <td class="is-narrow">
+                    <form method="post" action="/replay/{{request.id}}">
+                        <button type="submit" class="button is-info is-small">Replay</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="container box">
+    <h2 class="has-text-weight-bold is-size-4 mb-4">Request</h2>
+    {# hacky to get local vars #}
+    {% if 1 == 1 %}
+        {% let prefix = "req" %}
+        {% let body = incoming.as_ref() %}
+        {% let headers = request.headers.clone() %}
+        {% include "headers_detail.html" %}
+        {% include "body_detail.html" %}
+    {% endif %}
+</div>
+
+<div class="container box">
+    <h2 class="has-text-weight-bold is-size-4 mb-4">Response</h2>
+    {# hacky to get local vars #}
+    {% if 1 == 1 %}
+        {% let prefix = "resp" %}
+        {% let body = response.as_ref() %}
+        {% let headers = request.response_headers.clone() %}
+        {% include "headers_detail.html" %}
+        {% include "body_detail.html" %}
+    {% endif %}
+</div>
+
+{% endblock %}

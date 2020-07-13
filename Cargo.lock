@@ -76,6 +76,7 @@ dependencies = [
  "humansize",
  "num-traits",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -2211,6 +2212,7 @@ dependencies = [
  "pretty_env_logger",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "structopt",
  "thiserror",
  "tokio",
