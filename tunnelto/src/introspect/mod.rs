@@ -2,7 +2,7 @@ pub mod console_log;
 pub use self::console_log::*;
 use super::*;
 use std::net::{SocketAddr};
-use warp::Filter;
+use warp::{Filter};
 use warp::http::Method;
 use warp::path::FullPath;
 use warp::http::HeaderMap;
@@ -61,7 +61,7 @@ impl warp::reject::Reject for ForwardError {}
 pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
     let local_addr = format!("localhost:{}", &config.local_port);
 
-    let http_client = HttpClient::new();
+    let http_client= HttpClient::new();
 
     let get_client = move || {
         let client = http_client.clone();
@@ -124,7 +124,7 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
 async fn forward(local_addr: String,
                  method: Method,
                  path: FullPath,
-                 mut headers: HeaderMap,
+                 headers: HeaderMap,
                  mut body: impl Stream<Item = Result<impl Buf, warp::Error>> + Send + Sync + Unpin + 'static,
                  client: HttpClient) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection>
 {
@@ -151,12 +151,19 @@ async fn forward(local_addr: String,
 
     let mut request = hyper::Request::builder()
         .method(method.clone())
+        .version(hyper::Version::HTTP_11)
         .uri(url.parse::<hyper::Uri>().map_err(|e| {
             log::error!("invalid incoming url: {}, error: {:?}", url, e);
             warp::reject::custom(ForwardError::InvalidURL)
         })?);
 
-    let _ = request.headers_mut().replace(&mut headers);
+    for header in headers {
+        if let Some(header_name) = header.0 {
+            request = request.header(header_name, header.1)
+        }
+    }
+
+    // let _ = request.headers_mut().replace(&mut headers);
     let request = request.body(hyper::Body::from(collected.clone())).map_err(|e| {
         log::error!("failed to build request: {:?}", e);
         warp::reject::custom(ForwardError::InvalidRequest)
@@ -291,6 +298,7 @@ async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Re
 
     let mut new_request = hyper::Request::builder()
         .method(request.method)
+        .version(hyper::Version::HTTP_11)
         .uri(url.parse::<hyper::Uri>().map_err(|e| {
             log::error!("invalid incoming url: {}, error: {:?}", url, e);
             warp::reject::custom(ForwardError::InvalidURL)
