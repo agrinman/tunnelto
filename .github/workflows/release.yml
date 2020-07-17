@@ -100,7 +100,7 @@ jobs:
           chmod +x macOS/tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
           chmod +x linux/tunnelto
           export TAG="${{ steps.get_version.outputs.VERSION }}"
-          mv -C windows/tunnelto.exe tunnelto-windows.exe
+          cp windows/tunnelto.exe tunnelto-windows.exe
           tar -C macOS/ -czvf "tunnelto-$TAG.catalina.bottle.tar.gz" tunnelto/${{ steps.get_version.outputs.VERSION }}/bin/tunnelto
           cp "tunnelto-$TAG.catalina.bottle.tar.gz" "tunnelto-$TAG.big_sur.bottle.tar.gz"
           tar -C linux/ -czvf tunnelto-linux.tar.gz tunnelto
