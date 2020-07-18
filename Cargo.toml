@@ -3,5 +3,6 @@
 members = [
     "tunnelto_lib",
     "tunnelto",
-    "tunnelto_server"
+    "tunnelto_server",
+    "sql"
 ]
