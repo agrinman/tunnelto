@@ -2,3 +2,4 @@
 tunnelto_server
 !tunnelto_server/
 .env
+tunnelto_proxy/

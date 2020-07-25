@@ -10,6 +10,7 @@ use futures::{Stream, StreamExt};
 use bytes::Buf;
 use uuid::Uuid;
 use http_body::Body;
+use std::convert::Infallible;
 
 type HttpClient = hyper::Client<hyper::client::HttpConnector>;
 
@@ -19,6 +20,7 @@ pub struct Request {
     status: u16,
     is_replay: bool,
     path: String,
+    query: Option<String>,
     method: Method,
     headers: HashMap<String, Vec<String>>,
     body_data: Vec<u8>,
@@ -26,6 +28,16 @@ pub struct Request {
     response_data: Vec<u8>,
     started: chrono::NaiveDateTime,
     completed: chrono::NaiveDateTime,
+}
+
+impl Request {
+    pub fn path_and_query(&self) -> String {
+        if let Some(query) = self.query.as_ref() {
+            format!("{}?{}", self.path, query)
+        } else {
+            self.path.clone()
+        }
+    }
 }
 
 impl Request {
@@ -72,6 +84,7 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .and(warp::any().map(move || local_addr.clone()))
         .and(warp::method())
         .and(warp::path::full())
+        .and(opt_raw_query())
         .and(warp::header::headers_cloned())
         .and(warp::body::stream())
         .and(get_client())
@@ -124,6 +137,7 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
 async fn forward(local_addr: String,
                  method: Method,
                  path: FullPath,
+                 query: Option<String>,
                  headers: HeaderMap,
                  mut body: impl Stream<Item = Result<impl Buf, warp::Error>> + Send + Sync + Unpin + 'static,
                  client: HttpClient) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection>
@@ -147,7 +161,14 @@ async fn forward(local_addr: String,
         collected.extend_from_slice(chunk.as_ref())
     }
 
-    let url = format!("http://{}{}", local_addr, path.as_str());
+    let query_str = if let Some(query) = query.as_ref() {
+        format!("?{}", query)
+    } else {
+        String::new()
+    };
+
+    let url = format!("http://{}{}{}", local_addr, path.as_str(), query_str);
+    log::debug!("forwarding to: {}", &url);
 
     let mut request = hyper::Request::builder()
         .method(method.clone())
@@ -196,6 +217,7 @@ async fn forward(local_addr: String,
         id: Uuid::new_v4().to_string(),
         status: parts.status.as_u16(),
         path: path.as_str().to_owned(),
+        query,
         method,
         headers: request_headers,
         body_data: collected,
@@ -294,7 +316,13 @@ async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Re
         None => return Err(warp::reject::not_found())
     };
 
-    let url = format!("http://localhost:{}{}", addr.port(), &request.path);
+    let query_str = if let Some(query) = request.query.as_ref() {
+        format!("?{}", query)
+    } else {
+        String::new()
+    };
+
+    let url = format!("http://localhost:{}{}{}", addr.port(), &request.path, query_str);
 
     let mut new_request = hyper::Request::builder()
         .method(request.method)
@@ -339,4 +367,10 @@ impl <T> warp::reply::Reply for Page<T> where T:askama::Template + Send + 'stati
             "text/html",
         ).body(res.into()).unwrap()
     }
+}
+
+fn opt_raw_query() -> impl Filter<Extract = (Option<String>,), Error = Infallible> + Copy {
+    warp::filters::query::raw().map(|q| Some(q))
+        .or(warp::any().map(|| None))
+        .unify()
 }

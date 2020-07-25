@@ -3,5 +3,9 @@
 members = [
     "tunnelto_lib",
     "tunnelto",
-    "tunnelto_server"
+    "tunnelto_server",
+]
+
+exclude = [
+    "tunnelto_proxy"
 ]
