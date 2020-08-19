@@ -73,7 +73,7 @@ SUBCOMMANDS:
 ALLOWED_HOSTS="localhost" ALLOW_UNKNOWN_CLIENTS=1 cargo run --bin tunnelto_server
 
 # Run a local tunnelto client talking to your local tunnelto_server
-WORMHOLE_HOST="localhost" WORMHOLE_PORT=5000 TLS_OFF=1 cargo run --bin tunnelto -- start -p 8000
+CTRL_HOST="localhost" CTRL_PORT=5000 CTRL_TLS_OFF=1 cargo run --bin tunnelto -- start -p 8000
 
 # Test it out!
 # Remember 8080 is our local tunnelto TCP server
