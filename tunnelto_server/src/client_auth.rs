@@ -61,7 +61,7 @@ async fn auth_client(client_hello_data: &[u8], mut websocket: WebSocket) -> Opti
         }
     };
 
-    let (auth_key, requested_sub_domain) = match client_hello.client_type {
+    let (auth_key, client_id, requested_sub_domain) = match client_hello.client_type {
         ClientType::Anonymous =>  {
             let sub_domain = match client_hello.sub_domain {
                 Some(sd) => ServerHello::prefixed_random_domain(&sd),
@@ -72,13 +72,14 @@ async fn auth_client(client_hello_data: &[u8], mut websocket: WebSocket) -> Opti
         ClientType::Auth { key } => {
             match client_hello.sub_domain {
                 Some(requested_sub_domain) => {
-                    let (ws, sub_domain) = match sanitize_sub_domain_and_pre_validate(websocket, requested_sub_domain, &client_hello.id).await {
+                    let client_id = key.client_id();
+                    let (ws, sub_domain) = match sanitize_sub_domain_and_pre_validate(websocket, requested_sub_domain, &client_id).await {
                         Some(s) => s,
                         None => return None,
                     };
                     websocket = ws;
 
-                    (key, sub_domain)
+                    (key, client_id, sub_domain)
                 },
                 None => {
                     let sub_domain = ServerHello::random_domain();
@@ -105,7 +106,7 @@ async fn auth_client(client_hello_data: &[u8], mut websocket: WebSocket) -> Opti
         }
     };
 
-    Some((websocket, ClientHandshake { id: client_hello.id, sub_domain, is_anonymous: false }))
+    Some((websocket, ClientHandshake { id: client_id, sub_domain, is_anonymous: false }))
 }
 
 async fn sanitize_sub_domain_and_pre_validate(mut websocket: WebSocket, requested_sub_domain: String, client_id: &ClientId) -> Option<(WebSocket, String)>{

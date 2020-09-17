@@ -126,7 +126,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
             },
             ControlPacket::Ping => {
                 log::trace!("pong");
-                Connections::update_host(&client);
+                Connections::add(client.clone());
                 continue
             },
         };

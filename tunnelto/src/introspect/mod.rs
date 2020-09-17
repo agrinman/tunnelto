@@ -71,7 +71,7 @@ pub enum ForwardError{
 impl warp::reject::Reject for ForwardError {}
 
 pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
-    let local_addr = format!("localhost:{}", &config.local_port);
+    let local_addr = format!("{}:{}", &config.local_host, &config.local_port);
 
     let http_client= HttpClient::new();
 

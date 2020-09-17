@@ -31,7 +31,11 @@ struct Opts {
     #[structopt(short = "s", long = "subdomain")]
     sub_domain: Option<String>,
 
-    /// Sets the port to forward incoming tunnel traffic to on localhost
+    /// Sets the HOST (i.e. localhost) to forward incoming tunnel traffic to
+    #[structopt(short = "h", long = "host", default_value = "localhost")]
+    local_host: String,
+
+    /// Sets the port to forward incoming tunnel traffic to on the target host
     #[structopt(short = "p", long = "port", default_value = "8000")]
     port: String,
 
@@ -52,6 +56,7 @@ enum SubCommand {
 pub struct Config {
     pub client_id: ClientId,
     pub control_url: String,
+    pub local_host: String,
     pub host: String,
     pub local_port: String,
     pub sub_domain: Option<String>,
@@ -131,6 +136,7 @@ impl Config {
 
         Ok(Config {
             client_id: ClientId::generate(),
+            local_host: opts.local_host,
             control_url,
             host,
             local_port,

@@ -1,5 +1,6 @@
 use rand::prelude::*;
 use serde::{Serialize, Deserialize};
+use sha2::Digest;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
@@ -12,7 +13,12 @@ impl SecretKey {
             .take(22)
             .collect::<String>())
     }
+
+    pub fn client_id(&self) -> ClientId {
+        ClientId(base64::encode(&sha2::Sha256::digest(self.0.as_bytes()).to_vec()))
+    }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all="snake_case")]
 pub enum ServerHello {
@@ -112,7 +118,7 @@ pub enum ControlPacket {
     Ping,
 }
 
-pub const PING_INTERVAL:u64 = 1;
+pub const PING_INTERVAL:u64 = 5;
 
 const EMPTY_STREAM:StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
