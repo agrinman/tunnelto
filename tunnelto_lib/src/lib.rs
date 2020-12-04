@@ -133,6 +133,16 @@ impl ControlPacket {
         }
     }
 
+    pub fn packet_type(&self) -> &str {
+        match &self {
+            ControlPacket::Ping => "PING",
+            ControlPacket::Init(_) => "INIT STREAM",
+            ControlPacket::Data(_, _) => "STREAM DATA",
+            ControlPacket::Refused(_) => "REFUSED",
+            ControlPacket::End(_) => "END STREAM",
+        }
+    }
+
     pub fn deserialize(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
         if data.len() < 9 {
             return Err("invalid DataPacket, missing stream id".into())

@@ -36,5 +36,6 @@ askama = { version = "0.9.0", features = ["serde-json"] }
 chrono = "0.4.11"
 uuid = {version = "0.8.1", features = ["serde", "v4"] }
 hyper = "0.13.6"
+hyper-tls = "0.4.3"
 http-body = "0.3.1"
 serde_urlencoded = "0.6.1"

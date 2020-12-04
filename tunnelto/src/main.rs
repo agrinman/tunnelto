@@ -112,16 +112,19 @@ async fn run_wormhole(config: Config, introspect: IntrospectionAddrs, mut restar
         }
     });
 
-    // kick off the pings
-    // let _ = tunnel_tx.send(ControlPacket::Ping).await;
-
     // continuously read from websocket tunnel
+
     loop {
         match ws_stream.next().await {
             Some(Ok(message)) => {
-                if let Err(e) = process_control_flow_message(&introspect, tunnel_tx.clone(), message.into_data()).await {
-                    error!("Malformed protocol control packet: {:?}", e);
-                    return Ok(())
+                match process_control_flow_message(&introspect, tunnel_tx.clone(), message.into_data()).await {
+                    Ok(packet) => {
+                        debug!("Processed packet: {:?}", packet);
+                    }
+                    Err(e) => {
+                        error!("Malformed protocol control packet: {:?}", e);
+                        return Ok(())
+                    }
                 }
             },
             Some(Err(e)) => {
@@ -194,18 +197,25 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
             eprintln!("{}",
                       ">>> Notice: to access the full sub-domain feature, get your a free authentication key at https://dashboard.tunnelto.dev.".yellow());
         }
-        eprintln!("{} Forwarding to localhost:{}\n", "=>".green(), config.local_port.yellow());
+
+        let p = match (config.scheme.as_str(), config.local_port.as_ref()) {
+            (_ , Some(p)) => format!(":{}", p),
+            ("http", None ) => ":8000".to_string(),
+            (_, _) => "".to_string()
+        };
+
+        eprintln!("{} Forwarding to {}://{}{}\n", "=>".green(), config.scheme, config.local_host, p.yellow());
     }
-
-
 
     Ok(websocket)
 }
 
-async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>)
+    -> Result<ControlPacket, Box<dyn std::error::Error>>
+{
     let control_packet = ControlPacket::deserialize(&payload)?;
 
-    match control_packet {
+    match &control_packet {
         ControlPacket::Init(stream_id) => {
             info!("stream[{:?}] -> init", stream_id.to_string());
         },
@@ -218,7 +228,10 @@ async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunne
         }
         ControlPacket::End(stream_id) => {
             // find the stream
+            let stream_id = stream_id.clone();
+
             info!("got end stream [{:?}]", &stream_id);
+
             tokio::spawn(async move {
                 let stream = ACTIVE_STREAMS.read().unwrap().get(&stream_id).cloned();
                 if let Some(mut tx) = stream {
@@ -243,14 +256,14 @@ async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunne
 
             // forward data to it
             if let Some(mut tx) = active_stream {
-                tx.send(StreamMessage::Data(data)).await?;
+                tx.send(StreamMessage::Data(data.clone())).await?;
                 info!("forwarded to local tcp ({})", stream_id.to_string());
             } else {
                 error!("got data but no stream to send it to.");
-                let _ = tunnel_tx.send(ControlPacket::Refused(stream_id)).await?;
+                let _ = tunnel_tx.send(ControlPacket::Refused(stream_id.clone())).await?;
             }
         },
     };
 
-    Ok(())
+    Ok(control_packet.clone())
 }

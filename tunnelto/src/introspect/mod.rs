@@ -11,8 +11,11 @@ use bytes::Buf;
 use uuid::Uuid;
 use http_body::Body;
 use std::convert::Infallible;
+use std::str::FromStr;
+use hyper_tls::HttpsConnector;
+use hyper::client::HttpConnector;
 
-type HttpClient = hyper::Client<hyper::client::HttpConnector>;
+type HttpClient = hyper::Client<HttpsConnector<HttpConnector>>;
 
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -71,9 +74,17 @@ pub enum ForwardError{
 impl warp::reject::Reject for ForwardError {}
 
 pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
-    let local_addr = format!("{}:{}", &config.local_host, &config.local_port);
+    let port = if config.scheme.as_str() == "http" {
+        let port = config.local_port.as_ref().map(|p| p.as_str()).unwrap_or("8000");
+        format!(":{}", port)
+    } else {
+        config.local_port.as_ref().map(|p| format!(":{}", p)).unwrap_or(String::new())
+    };
 
-    let http_client= HttpClient::new();
+    let local_addr = format!("{}://{}{}", &config.scheme, &config.local_host, port);
+
+    let https = hyper_tls::HttpsConnector::new();
+    let http_client = hyper::Client::builder().build::<_, hyper::Body>(https);
 
     let get_client = move || {
         let client = http_client.clone();
@@ -128,7 +139,12 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .or(css)
         .or(logo);
 
-    let (web_explorer_address, explorer_server) = warp::serve(web_explorer).bind_ephemeral(SocketAddr::from(([0,0,0,0], 0)));
+    let (web_explorer_address, explorer_server) = if let Some(dashboard_address) = config.dashboard_address {
+        warp::serve(web_explorer).bind_ephemeral(SocketAddr::from_str(dashboard_address.as_str()).expect("Failed to bind to supplied local dashboard address"))
+    } else {
+        warp::serve(web_explorer).bind_ephemeral(SocketAddr::from(([0,0,0,0], 0)))
+    };
+
     tokio::spawn(explorer_server);
 
     IntrospectionAddrs { forward_address, web_explorer_address}
@@ -167,7 +183,7 @@ async fn forward(local_addr: String,
         String::new()
     };
 
-    let url = format!("http://{}{}{}", local_addr, path.as_str(), query_str);
+    let url = format!("{}{}{}", local_addr, path.as_str(), query_str);
     log::debug!("forwarding to: {}", &url);
 
     let mut request = hyper::Request::builder()

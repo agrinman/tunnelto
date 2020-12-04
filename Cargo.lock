@@ -778,9 +778,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-tls"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3adcd308402b9553630734e9c36b77a7e48b3821251ca2493e8cd596763aafaa"
+checksum = "d979acc56dcb5b8dddba3917601745e877576475aa046df3226eabdecef78eed"
 dependencies = [
  "bytes",
  "hyper",
@@ -2216,6 +2216,7 @@ dependencies = [
  "httparse",
  "human-panic",
  "hyper",
+ "hyper-tls",
  "indicatif",
  "lazy_static",
  "log 0.4.8",

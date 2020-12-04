@@ -32,13 +32,20 @@ struct Opts {
     sub_domain: Option<String>,
 
     /// Sets the HOST (i.e. localhost) to forward incoming tunnel traffic to
-    #[structopt(short = "h", long = "host", default_value = "localhost")]
+    #[structopt(long = "host", default_value = "localhost")]
     local_host: String,
 
-    /// Sets the port to forward incoming tunnel traffic to on the target host
-    #[structopt(short = "p", long = "port", default_value = "8000")]
-    port: String,
+    /// Sets the SCHEME (i.e. http or https) to forward incoming tunnel traffic to
+    #[structopt(long = "scheme", default_value = "http")]
+    scheme: String,
 
+    /// Sets the port to forward incoming tunnel traffic to on the target host
+    #[structopt(short = "p", long = "port")]
+    port: Option<String>,
+
+    /// Sets the address of the local introspection dashboard
+    #[structopt(long = "dashboard-address")]
+    dashboard_address: Option<String>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -57,12 +64,14 @@ pub struct Config {
     pub client_id: ClientId,
     pub control_url: String,
     pub local_host: String,
+    pub scheme: String,
     pub host: String,
-    pub local_port: String,
+    pub local_port: Option<String>,
     pub sub_domain: Option<String>,
     pub secret_key: Option<SecretKey>,
     pub tls_off: bool,
     pub first_run: bool,
+    pub dashboard_address: Option<String>,
     pub verbose: bool,
 }
 
@@ -137,10 +146,12 @@ impl Config {
         Ok(Config {
             client_id: ClientId::generate(),
             local_host: opts.local_host,
+            scheme: opts.scheme,
             control_url,
             host,
             local_port,
             sub_domain,
+            dashboard_address: opts.dashboard_address,
             verbose: opts.verbose,
             secret_key: secret_key.map(|s| SecretKey(s)),
             tls_off,
