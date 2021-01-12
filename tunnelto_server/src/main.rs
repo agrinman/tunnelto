@@ -31,6 +31,7 @@ lazy_static! {
     pub static ref ALLOWED_HOSTS:Vec<String> = allowed_host_suffixes();
     pub static ref BLOCKED_SUB_DOMAINS:Vec<String> = blocked_sub_domains_suffixes();
     pub static ref AUTH_DB_SERVICE:AuthDbService = AuthDbService::new().expect("failed to init auth-service");
+    pub static ref CTRL_PORT:u16 = ctrl_port();
 }
 
 /// What hosts do we allow tunnels on:
@@ -51,12 +52,25 @@ pub fn blocked_sub_domains_suffixes() -> Vec<String> {
         .unwrap_or(vec![])
 }
 
+pub fn ctrl_port() -> u16 {
+    let ctrl_port = std::env::var("CTRL_PORT")
+        .unwrap_or("".to_string());
+    if ctrl_port.is_empty() {
+        5000
+    } else {
+        ctrl_port.parse()
+            .unwrap_or_else(|_| {
+                panic!(format!("Invalid CTRL_PORT: {}", ctrl_port));
+            })
+    }
+}
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
 
-    info!("starting wormhole server");
-    control_server::spawn(([0,0,0,0], 5000));
+    info!("starting wormhole server on 0.0.0.0:{}", *CTRL_PORT);
+    control_server::spawn(([0,0,0,0], *CTRL_PORT));
 
     let listen_addr = format!("0.0.0.0:{}", std::env::var("PORT").unwrap_or("8080".to_string()));
     info!("listening on: {}", &listen_addr);
