@@ -4,7 +4,7 @@ use tokio::io::{ReadHalf, WriteHalf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 async fn direct_to_control(mut incoming: TcpStream) {
-    let mut control_socket = match TcpStream::connect("localhost:5000").await {
+    let mut control_socket = match TcpStream::connect(format!("localhost:{}", *CTRL_PORT)).await {
         Ok(s) => s,
         Err(e) => {
             log::warn!("failed to connect to local control server {:?}", e);

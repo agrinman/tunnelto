@@ -84,6 +84,7 @@ curl -H '<subdomain>.localhost' "http://localhost:8080/some_path?with=somequery"
 - `ALLOWED_HOSTS`: which hostname suffixes do we allow forwarding on
 - `SECRET_KEY`: an authentication key for restricting access to your tunnelto server
 - `ALLOW_UNKNOWN_CLIENTS`: a boolean flag, if set, enables unknown (no authentication) clients to use your tunnelto server. Note that unknown clients are not allowed to chose a subdomain via `-s`.
+- `CTRL_PORT`: which control port to listen to (defaults to 5000)
 
 
 ## Caveats
