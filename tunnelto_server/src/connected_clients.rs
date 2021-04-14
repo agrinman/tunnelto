@@ -1,4 +1,5 @@
 use super::*;
+use dashmap::DashMap;
 
 #[derive(Debug, Clone)]
 pub struct ConnectedClient {
@@ -8,63 +9,69 @@ pub struct ConnectedClient {
 }
 
 pub struct Connections {
-    clients: Arc<RwLock<HashMap<ClientId, ConnectedClient>>>,
-    hosts: Arc<RwLock<HashMap<String, ConnectedClient>>>
+    clients: Arc<DashMap<ClientId, ConnectedClient>>,
+    hosts: Arc<DashMap<String, ConnectedClient>>,
 }
 
 impl Connections {
     pub fn new() -> Self {
         Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            hosts: Arc::new(RwLock::new(HashMap::new()))
+            clients: Arc::new(DashMap::new()),
+            hosts: Arc::new(DashMap::new()),
         }
     }
 
     pub fn update_host(client: &ConnectedClient) {
-        CONNECTIONS.hosts.write().unwrap().insert(client.host.clone(), client.clone());
+        CONNECTIONS
+            .hosts
+            .insert(client.host.clone(), client.clone());
     }
-    
+
     pub fn remove(client: &ConnectedClient) {
         client.tx.close_channel();
-        let mut connected = CONNECTIONS.clients.write().unwrap();
-        let mut hosts = CONNECTIONS.hosts.write().unwrap();
 
         // ensure another client isn't using this host
-        match hosts.get(&client.host) {
-            Some(client_for_host) if client_for_host.id == client.id => {
-                log::debug!("dropping sub-domain: {}", &client.host);
-                hosts.remove(&client.host);
-            },
-            _ => {}
+        if CONNECTIONS
+            .hosts
+            .get(&client.host)
+            .map_or(false, |c| c.id == client.id)
+        {
+            log::debug!("dropping sub-domain: {}", &client.host);
+            CONNECTIONS.hosts.remove(&client.host);
         };
 
-        connected.remove(&client.id);
+        CONNECTIONS.clients.remove(&client.id);
         log::debug!("rm client: {}", &client.id);
 
-        // drop all the streams
-        // if there are no more tunnel clients
-        if connected.is_empty() {
-            let mut streams = ACTIVE_STREAMS.write().unwrap();
-            for (_, stream) in streams.drain() {
-                stream.tx.close_channel();
-            }
-        }
+        // // drop all the streams
+        // // if there are no more tunnel clients
+        // if CONNECTIONS.clients.is_empty() {
+        //     let mut streams = ACTIVE_STREAMS.;
+        //     for (_, stream) in streams.drain() {
+        //         stream.tx.close_channel();
+        //     }
+        // }
     }
 
     pub fn client_for_host(host: &String) -> Option<ClientId> {
-        CONNECTIONS.hosts.read().unwrap().get(host).map(|c| c.id.clone())
+        CONNECTIONS.hosts.get(host).map(|c| c.id.clone())
     }
 
     pub fn get(client_id: &ClientId) -> Option<ConnectedClient> {
-        CONNECTIONS.clients.read().unwrap().get(&client_id).cloned()
+        CONNECTIONS
+            .clients
+            .get(&client_id)
+            .map(|c| c.value().clone())
     }
 
     pub fn find_by_host(host: &String) -> Option<ConnectedClient> {
-        CONNECTIONS.hosts.read().unwrap().get(host).cloned()
+        CONNECTIONS.hosts.get(host).map(|c| c.value().clone())
     }
 
     pub fn add(client: ConnectedClient) {
-        CONNECTIONS.clients.write().unwrap().insert(client.id.clone(), client.clone());
-        CONNECTIONS.hosts.write().unwrap().insert(client.host.clone(), client);
+        CONNECTIONS
+            .clients
+            .insert(client.id.clone(), client.clone());
+        CONNECTIONS.hosts.insert(client.host.clone(), client);
     }
 }

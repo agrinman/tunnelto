@@ -1,30 +1,30 @@
-use futures::{StreamExt, SinkExt};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
+use futures::{SinkExt, StreamExt};
 
-use tokio_tungstenite::{WebSocketStream, MaybeTlsStream};
 use tokio::net::TcpStream;
-use tungstenite::protocol::Message;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-pub use log::{info, debug, warn, error};
 use human_panic::setup_panic;
+pub use log::{debug, error, info, warn};
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::env;
+use std::sync::{Arc, RwLock};
 
-mod local;
 mod config;
-mod introspect;
-mod spinner;
 mod error;
+mod introspect;
+mod local;
+mod spinner;
 pub use self::error::*;
 
-pub use tunnelto_lib::*;
 pub use config::*;
+pub use tunnelto_lib::*;
 
-use std::time::Duration;
-use colored::Colorize;
 use crate::introspect::IntrospectionAddrs;
+use colored::Colorize;
+use std::time::Duration;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
 
@@ -37,7 +37,6 @@ pub enum StreamMessage {
     Data(Vec<u8>),
     Close,
 }
-
 
 #[tokio::main]
 async fn main() {
@@ -62,15 +61,15 @@ async fn main() {
                     match e {
                         Error::WebSocketError(err) => {
                             warn!("websocket error: {:?}..restarting", err);
-                            continue
-                        },
+                            continue;
+                        }
                         _ => {}
                     };
                     eprintln!("Error: {}", format!("{}", e).red());
-                    return
+                    return;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         };
 
         config.first_run = false;
@@ -79,11 +78,19 @@ async fn main() {
 }
 
 /// Setup the tunnel to our control server
-async fn run_wormhole(config: Config, introspect: IntrospectionAddrs, mut restart_tx: UnboundedSender<()>) -> Result<(), Error> {
+async fn run_wormhole(
+    config: Config,
+    introspect: IntrospectionAddrs,
+    mut restart_tx: UnboundedSender<()>,
+) -> Result<(), Error> {
     let websocket = connect_to_wormhole(&config).await?;
 
     if config.first_run {
-        eprintln!("Local Inspect Dashboard: {}{}", "http://localhost:".yellow(), introspect.web_explorer_address.port());
+        eprintln!(
+            "Local Inspect Dashboard: {}{}",
+            "http://localhost:".yellow(),
+            introspect.web_explorer_address.port()
+        );
     }
 
     // split reading and writing
@@ -100,14 +107,14 @@ async fn run_wormhole(config: Config, introspect: IntrospectionAddrs, mut restar
                 None => {
                     warn!("control flow didn't send anything!");
                     let _ = restart_tx.send(()).await;
-                    return
+                    return;
                 }
             };
 
             if let Err(e) = ws_sink.send(Message::binary(packet.serialize())).await {
                 warn!("failed to write message to tunnel websocket: {:?}", e);
                 let _ = restart_tx.send(()).await;
-                return
+                return;
             }
         }
     });
@@ -117,36 +124,48 @@ async fn run_wormhole(config: Config, introspect: IntrospectionAddrs, mut restar
     loop {
         match ws_stream.next().await {
             Some(Ok(message)) => {
-                match process_control_flow_message(&introspect, tunnel_tx.clone(), message.into_data()).await {
+                match process_control_flow_message(
+                    &introspect,
+                    tunnel_tx.clone(),
+                    message.into_data(),
+                )
+                .await
+                {
                     Ok(packet) => {
                         debug!("Processed packet: {:?}", packet);
                     }
                     Err(e) => {
                         error!("Malformed protocol control packet: {:?}", e);
-                        return Ok(())
+                        return Ok(());
                     }
                 }
-            },
+            }
             Some(Err(e)) => {
                 warn!("websocket read error: {:?}", e);
-                return Ok(())
-            },
+                return Ok(());
+            }
             None => {
                 warn!("websocket sent none");
-                return Ok(())
+                return Ok(());
             }
         }
     }
 }
 
-async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
+async fn connect_to_wormhole(
+    config: &Config,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
     let spinner = if config.first_run {
-        eprintln!("{}\n\n", format!("{}", include_str!("../static/img/wormhole_ascii.txt")).green());
-        Some(spinner::new_spinner("initializing remote tunnel, please stand by"))
+        eprintln!(
+            "{}\n\n",
+            format!("{}", include_str!("../static/img/wormhole_ascii.txt")).green()
+        );
+        Some(spinner::new_spinner(
+            "initializing remote tunnel, please stand by",
+        ))
     } else {
         None
     };
-
 
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
@@ -161,24 +180,31 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     info!("connecting to wormhole as client {}", &client_hello.id);
 
     let hello = serde_json::to_vec(&client_hello).unwrap();
-    websocket.send(Message::binary(hello)).await.expect("Failed to send client hello to wormhole server.");
+    websocket
+        .send(Message::binary(hello))
+        .await
+        .expect("Failed to send client hello to wormhole server.");
 
     // wait for Server hello
-    let server_hello_data = websocket.next().await.ok_or(Error::NoResponseFromServer)??.into_data();
+    let server_hello_data = websocket
+        .next()
+        .await
+        .ok_or(Error::NoResponseFromServer)??
+        .into_data();
     let server_hello = serde_json::from_slice::<ServerHello>(&server_hello_data).map_err(|e| {
         error!("Couldn't parse server_hello from {:?}", e);
         Error::ServerReplyInvalid
     })?;
 
     let sub_domain = match server_hello {
-        ServerHello::Success{ sub_domain } => {
+        ServerHello::Success { sub_domain } => {
             info!("Server accepted our connection.");
             sub_domain
-        },
+        }
         ServerHello::AuthFailed => {
             return Err(Error::AuthenticationFailed);
-        },
-        ServerHello::InvalidSubDomain =>{
+        }
+        ServerHello::InvalidSubDomain => {
             return Err(Error::InvalidSubDomain);
         }
         ServerHello::SubDomainInUse => {
@@ -190,7 +216,10 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
     // Note: the latter should rarely occur.
     if config.first_run || config.sub_domain.as_ref() != Some(&sub_domain) {
         if let Some(pb) = spinner {
-            pb.finish_with_message(&format!("Success! Remote tunnel created on: {}", &config.activation_url(&sub_domain).bold().green()));
+            pb.finish_with_message(&format!(
+                "Success! Remote tunnel created on: {}",
+                &config.activation_url(&sub_domain).bold().green()
+            ));
         }
 
         if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) {
@@ -199,33 +228,39 @@ async fn connect_to_wormhole(config: &Config) -> Result<WebSocketStream<MaybeTls
         }
 
         let p = match (config.scheme.as_str(), config.local_port.as_ref()) {
-            (_ , Some(p)) => format!(":{}", p),
-            ("http", None ) => ":8000".to_string(),
-            (_, _) => "".to_string()
+            (_, Some(p)) => format!(":{}", p),
+            ("http", None) => ":8000".to_string(),
+            (_, _) => "".to_string(),
         };
 
-        eprintln!("{} Forwarding to {}://{}{}\n", "=>".green(), config.scheme, config.local_host, p.yellow());
+        eprintln!(
+            "{} Forwarding to {}://{}{}\n",
+            "=>".green(),
+            config.scheme,
+            config.local_host,
+            p.yellow()
+        );
     }
 
     Ok(websocket)
 }
 
-async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunnel_tx: UnboundedSender<ControlPacket>, payload: Vec<u8>)
-    -> Result<ControlPacket, Box<dyn std::error::Error>>
-{
+async fn process_control_flow_message(
+    introspect: &IntrospectionAddrs,
+    mut tunnel_tx: UnboundedSender<ControlPacket>,
+    payload: Vec<u8>,
+) -> Result<ControlPacket, Box<dyn std::error::Error>> {
     let control_packet = ControlPacket::deserialize(&payload)?;
 
     match &control_packet {
         ControlPacket::Init(stream_id) => {
             info!("stream[{:?}] -> init", stream_id.to_string());
-        },
+        }
         ControlPacket::Ping => {
             log::info!("got ping");
             let _ = tunnel_tx.send(ControlPacket::Ping).await;
-        },
-        ControlPacket::Refused(_) => {
-            return Err("unexpected control packet".into())
         }
+        ControlPacket::Refused(_) => return Err("unexpected control packet".into()),
         ControlPacket::End(stream_id) => {
             // find the stream
             let stream_id = stream_id.clone();
@@ -235,20 +270,28 @@ async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunne
             tokio::spawn(async move {
                 let stream = ACTIVE_STREAMS.read().unwrap().get(&stream_id).cloned();
                 if let Some(mut tx) = stream {
-                    tokio::time::delay_for(Duration::from_secs(5)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                     let _ = tx.send(StreamMessage::Close).await.map_err(|e| {
                         error!("failed to send stream close: {:?}", e);
                     });
                     ACTIVE_STREAMS.write().unwrap().remove(&stream_id);
                 }
             });
-
-        },
+        }
         ControlPacket::Data(stream_id, data) => {
-            info!("stream[{:?}] -> new data: {:?}", stream_id.to_string(), data.len());
+            info!(
+                "stream[{:?}] -> new data: {:?}",
+                stream_id.to_string(),
+                data.len()
+            );
 
             if !ACTIVE_STREAMS.read().unwrap().contains_key(&stream_id) {
-                local::setup_new_stream(introspect.forward_address.port(), tunnel_tx.clone(), stream_id.clone()).await;
+                local::setup_new_stream(
+                    introspect.forward_address.port(),
+                    tunnel_tx.clone(),
+                    stream_id.clone(),
+                )
+                .await;
             }
 
             // find the right stream
@@ -260,9 +303,11 @@ async fn process_control_flow_message(introspect: &IntrospectionAddrs, mut tunne
                 info!("forwarded to local tcp ({})", stream_id.to_string());
             } else {
                 error!("got data but no stream to send it to.");
-                let _ = tunnel_tx.send(ControlPacket::Refused(stream_id.clone())).await?;
+                let _ = tunnel_tx
+                    .send(ControlPacket::Refused(stream_id.clone()))
+                    .await?;
             }
-        },
+        }
     };
 
     Ok(control_packet.clone())

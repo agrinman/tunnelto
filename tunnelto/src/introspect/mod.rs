@@ -1,19 +1,19 @@
 pub mod console_log;
 pub use self::console_log::*;
 use super::*;
-use std::net::{SocketAddr};
-use warp::{Filter};
+use bytes::Buf;
+use futures::{Stream, StreamExt};
+use hyper::body::HttpBody;
+use hyper::client::HttpConnector;
+use hyper_tls::HttpsConnector;
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::str::FromStr;
+use uuid::Uuid;
+use warp::http::HeaderMap;
 use warp::http::Method;
 use warp::path::FullPath;
-use warp::http::HeaderMap;
-use futures::{Stream, StreamExt};
-use bytes::Buf;
-use uuid::Uuid;
-use http_body::Body;
-use std::convert::Infallible;
-use std::str::FromStr;
-use hyper_tls::HttpsConnector;
-use hyper::client::HttpConnector;
+use warp::Filter;
 
 type HttpClient = hyper::Client<HttpsConnector<HttpConnector>>;
 
@@ -65,7 +65,7 @@ pub struct IntrospectionAddrs {
 }
 
 #[derive(Debug)]
-pub enum ForwardError{
+pub enum ForwardError {
     IncomingRead,
     InvalidURL,
     InvalidRequest,
@@ -75,10 +75,18 @@ impl warp::reject::Reject for ForwardError {}
 
 pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
     let port = if config.scheme.as_str() == "http" {
-        let port = config.local_port.as_ref().map(|p| p.as_str()).unwrap_or("8000");
+        let port = config
+            .local_port
+            .as_ref()
+            .map(|p| p.as_str())
+            .unwrap_or("8000");
         format!(":{}", port)
     } else {
-        config.local_port.as_ref().map(|p| format!(":{}", p)).unwrap_or(String::new())
+        config
+            .local_port
+            .as_ref()
+            .map(|p| format!(":{}", p))
+            .unwrap_or(String::new())
     };
 
     let local_addr = format!("{}://{}{}", &config.scheme, &config.local_host, port);
@@ -101,30 +109,35 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .and(get_client())
         .and_then(forward);
 
-    let (forward_address, intercept_server) = warp::serve(intercept).bind_ephemeral(SocketAddr::from(([0,0,0,0], 0)));
+    let (forward_address, intercept_server) =
+        warp::serve(intercept).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)));
     tokio::spawn(intercept_server);
 
-    let css = warp::get().and(warp::path!("static" / "css" / "styles.css")
-        .map(|| {
-            let mut res = warp::http::Response::new(hyper::Body::from(include_str!("../../static/css/styles.css")));
-            res.headers_mut().insert(
-                warp::http::header::CONTENT_TYPE,
-                warp::http::header::HeaderValue::from_static("text/css"),
-            );
-            res
-        }));
-    let logo = warp::get().and(warp::path!("static" / "img" / "logo.png")
-        .map(|| {
-            let mut res = warp::http::Response::new(hyper::Body::from(include_bytes!("../../static/img/logo.png").to_vec()));
-            res.headers_mut().insert(
-                warp::http::header::CONTENT_TYPE,
-                warp::http::header::HeaderValue::from_static("image/png"),
-            );
-            res
-        }));
+    let css = warp::get().and(warp::path!("static" / "css" / "styles.css").map(|| {
+        let mut res = warp::http::Response::new(warp::hyper::Body::from(include_str!(
+            "../../static/css/styles.css"
+        )));
+        res.headers_mut().insert(
+            warp::http::header::CONTENT_TYPE,
+            warp::http::header::HeaderValue::from_static("text/css"),
+        );
+        res
+    }));
+    let logo = warp::get().and(warp::path!("static" / "img" / "logo.png").map(|| {
+        let mut res = warp::http::Response::new(warp::hyper::Body::from(
+            include_bytes!("../../static/img/logo.png").to_vec(),
+        ));
+        res.headers_mut().insert(
+            warp::http::header::CONTENT_TYPE,
+            warp::http::header::HeaderValue::from_static("image/png"),
+        );
+        res
+    }));
     let forward_clone = forward_address.clone();
 
-    let web_explorer = warp::get().and(warp::path::end()).and_then(inspector)
+    let web_explorer = warp::get()
+        .and(warp::path::end())
+        .and_then(inspector)
         .or(warp::get()
             .and(warp::path("detail"))
             .and(warp::path::param())
@@ -133,48 +146,59 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
             .and(warp::path("replay"))
             .and(warp::path::param())
             .and(get_client())
-            .and_then(move |id, client| {
-                replay_request(id, client, forward_clone.clone())
-            }))
+            .and_then(move |id, client| replay_request(id, client, forward_clone.clone())))
         .or(css)
         .or(logo);
 
-    let (web_explorer_address, explorer_server) = if let Some(dashboard_address) = config.dashboard_address {
-        warp::serve(web_explorer).bind_ephemeral(SocketAddr::from_str(dashboard_address.as_str()).expect("Failed to bind to supplied local dashboard address"))
-    } else {
-        warp::serve(web_explorer).bind_ephemeral(SocketAddr::from(([0,0,0,0], 0)))
-    };
+    let (web_explorer_address, explorer_server) =
+        if let Some(dashboard_address) = config.dashboard_address {
+            warp::serve(web_explorer).bind_ephemeral(
+                SocketAddr::from_str(dashboard_address.as_str())
+                    .expect("Failed to bind to supplied local dashboard address"),
+            )
+        } else {
+            warp::serve(web_explorer).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)))
+        };
 
     tokio::spawn(explorer_server);
 
-    IntrospectionAddrs { forward_address, web_explorer_address}
+    IntrospectionAddrs {
+        forward_address,
+        web_explorer_address,
+    }
 }
 
-async fn forward(local_addr: String,
-                 method: Method,
-                 path: FullPath,
-                 query: Option<String>,
-                 headers: HeaderMap,
-                 mut body: impl Stream<Item = Result<impl Buf, warp::Error>> + Send + Sync + Unpin + 'static,
-                 client: HttpClient) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection>
-{
+async fn forward(
+    local_addr: String,
+    method: Method,
+    path: FullPath,
+    query: Option<String>,
+    headers: HeaderMap,
+    mut body: impl Stream<Item = Result<impl Buf, warp::Error>> + Send + Sync + Unpin + 'static,
+    client: HttpClient,
+) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection> {
     let started = chrono::Utc::now().naive_utc();
 
     let mut request_headers = HashMap::new();
     headers.keys().for_each(|k| {
-        let values  = headers.get_all(k).iter().filter_map(|v| v.to_str().ok()).map(|s| s.to_owned()).collect();
+        let values = headers
+            .get_all(k)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .map(|s| s.to_owned())
+            .collect();
         request_headers.insert(k.as_str().to_owned(), values);
     });
 
-    let mut collected:Vec<u8> = vec![];
+    let mut collected: Vec<u8> = vec![];
 
     while let Some(chunk) = body.next().await {
         let chunk = chunk.map_err(|e| {
             log::error!("error reading incoming buffer: {:?}", e);
             warp::reject::custom(ForwardError::IncomingRead)
-        })?.to_bytes();
+        })?;
 
-        collected.extend_from_slice(chunk.as_ref())
+        collected.extend_from_slice(chunk.chunk())
     }
 
     let query_str = if let Some(query) = query.as_ref() {
@@ -201,10 +225,12 @@ async fn forward(local_addr: String,
     }
 
     // let _ = request.headers_mut().replace(&mut headers);
-    let request = request.body(hyper::Body::from(collected.clone())).map_err(|e| {
-        log::error!("failed to build request: {:?}", e);
-        warp::reject::custom(ForwardError::InvalidRequest)
-    })?;
+    let request = request
+        .body(hyper::Body::from(collected.clone()))
+        .map_err(|e| {
+            log::error!("failed to build request: {:?}", e);
+            warp::reject::custom(ForwardError::InvalidRequest)
+        })?;
 
     let response = client.request(request).await.map_err(|e| {
         log::error!("local server error: {:?}", e);
@@ -213,7 +239,13 @@ async fn forward(local_addr: String,
 
     let mut response_headers = HashMap::new();
     response.headers().keys().for_each(|k| {
-        let values  = response.headers().get_all(k).iter().filter_map(|v| v.to_str().ok()).map(|s| s.to_owned()).collect();
+        let values = response
+            .headers()
+            .get_all(k)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .map(|s| s.to_owned())
+            .collect();
         response_headers.insert(k.as_str().to_owned(), values);
     });
 
@@ -244,19 +276,25 @@ async fn forward(local_addr: String,
         is_replay: false,
     };
 
-    REQUESTS.write().unwrap().insert(stored_request.id.clone(), stored_request);
+    REQUESTS
+        .write()
+        .unwrap()
+        .insert(stored_request.id.clone(), stored_request);
 
-    Ok(Box::new(warp::http::Response::from_parts(parts, response_data)))
+    Ok(Box::new(warp::http::Response::from_parts(
+        parts,
+        response_data,
+    )))
 }
 
 #[derive(Debug, Clone, askama::Template)]
-#[template(path="index.html")]
+#[template(path = "index.html")]
 struct Inspector {
-    requests: Vec<Request>
+    requests: Vec<Request>,
 }
 
 #[derive(Debug, Clone, askama::Template)]
-#[template(path="detail.html")]
+#[template(path = "detail.html")]
 struct InspectorDetail {
     request: Request,
     incoming: BodyData,
@@ -279,23 +317,28 @@ impl AsRef<BodyData> for BodyData {
 #[derive(Debug, Clone)]
 enum DataType {
     Json,
-    Unknown
+    Unknown,
 }
 
 async fn inspector() -> Result<Page<Inspector>, warp::reject::Rejection> {
-    let mut requests:Vec<Request> = REQUESTS.read().unwrap().values().map(|r| r.clone()).collect();
-    requests.sort_by(|a,b| b.completed.cmp(&a.completed));
+    let mut requests: Vec<Request> = REQUESTS
+        .read()
+        .unwrap()
+        .values()
+        .map(|r| r.clone())
+        .collect();
+    requests.sort_by(|a, b| b.completed.cmp(&a.completed));
     let inspect = Inspector { requests };
     Ok(Page(inspect))
 }
 
 async fn request_detail(rid: String) -> Result<Page<InspectorDetail>, warp::reject::Rejection> {
-    let request:Request = match REQUESTS.read().unwrap().get(&rid) {
+    let request: Request = match REQUESTS.read().unwrap().get(&rid) {
         Some(r) => r.clone(),
-        None => return Err(warp::reject::not_found())
+        None => return Err(warp::reject::not_found()),
     };
 
-    let detail = InspectorDetail{
+    let detail = InspectorDetail {
         incoming: get_body_data(&request.body_data),
         response: get_body_data(&request.response_data),
         request,
@@ -308,28 +351,34 @@ fn get_body_data(input: &[u8]) -> BodyData {
     let mut body = BodyData {
         data_type: DataType::Unknown,
         content: None,
-        raw: std::str::from_utf8(input).map(|s| s.to_string()).unwrap_or("No UTF-8 Data".to_string())
+        raw: std::str::from_utf8(input)
+            .map(|s| s.to_string())
+            .unwrap_or("No UTF-8 Data".to_string()),
     };
 
     match serde_json::from_slice::<serde_json::Value>(input) {
         Ok(serde_json::Value::Object(map)) => {
             body.data_type = DataType::Json;
             body.content = serde_json::to_string_pretty(&map).ok();
-        },
+        }
         Ok(serde_json::Value::Array(arr)) => {
             body.data_type = DataType::Json;
             body.content = serde_json::to_string_pretty(&arr).ok();
-        },
+        }
         _ => {}
     }
 
     body
 }
 
-async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection> {
-    let request:Request = match REQUESTS.read().unwrap().get(&rid) {
+async fn replay_request(
+    rid: String,
+    client: HttpClient,
+    addr: SocketAddr,
+) -> Result<Box<dyn warp::Reply>, warp::reject::Rejection> {
+    let request: Request = match REQUESTS.read().unwrap().get(&rid) {
         Some(r) => r.clone(),
-        None => return Err(warp::reject::not_found())
+        None => return Err(warp::reject::not_found()),
     };
 
     let query_str = if let Some(query) = request.query.as_ref() {
@@ -338,7 +387,12 @@ async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Re
         String::new()
     };
 
-    let url = format!("http://localhost:{}{}{}", addr.port(), &request.path, query_str);
+    let url = format!(
+        "http://localhost:{}{}{}",
+        addr.port(),
+        &request.path,
+        query_str
+    );
 
     let mut new_request = hyper::Request::builder()
         .method(request.method)
@@ -354,10 +408,12 @@ async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Re
         }
     }
 
-    let new_request = new_request.body(hyper::Body::from(request.body_data)).map_err(|e| {
-        log::error!("failed to build request: {:?}", e);
-        warp::reject::custom(ForwardError::InvalidRequest)
-    })?;
+    let new_request = new_request
+        .body(hyper::Body::from(request.body_data))
+        .map_err(|e| {
+            log::error!("failed to build request: {:?}", e);
+            warp::reject::custom(ForwardError::InvalidRequest)
+        })?;
 
     let _ = client.request(new_request).await.map_err(|e| {
         log::error!("local server error: {:?}", e);
@@ -374,19 +430,24 @@ async fn replay_request(rid: String, client: HttpClient, addr: SocketAddr) -> Re
 
 struct Page<T>(T);
 
-impl <T> warp::reply::Reply for Page<T> where T:askama::Template + Send + 'static {
+impl<T> warp::reply::Reply for Page<T>
+where
+    T: askama::Template + Send + 'static,
+{
     fn into_response(self) -> warp::reply::Response {
         let res = self.0.render().unwrap();
 
-        warp::http::Response::builder().status(warp::http::StatusCode::OK).header(
-            warp::http::header::CONTENT_TYPE,
-            "text/html",
-        ).body(res.into()).unwrap()
+        warp::http::Response::builder()
+            .status(warp::http::StatusCode::OK)
+            .header(warp::http::header::CONTENT_TYPE, "text/html")
+            .body(res.into())
+            .unwrap()
     }
 }
 
 fn opt_raw_query() -> impl Filter<Extract = (Option<String>,), Error = Infallible> + Copy {
-    warp::filters::query::raw().map(|q| Some(q))
+    warp::filters::query::raw()
+        .map(|q| Some(q))
         .or(warp::any().map(|| None))
         .unify()
 }

@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to connect to control server: {0}.")]
-    WebSocketError(#[from] tungstenite::error::Error),
+    WebSocketError(#[from] tokio_tungstenite::tungstenite::error::Error),
 
     #[error("Server denied the connection. Please check your authentication key.")]
     AuthenticationFailed,
@@ -19,5 +19,4 @@ pub enum Error {
 
     #[error("The server did not respond to our client_hello.")]
     NoResponseFromServer,
-
 }
