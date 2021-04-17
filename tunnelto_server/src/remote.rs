@@ -4,13 +4,14 @@ use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 
 async fn direct_to_control(mut incoming: TcpStream) {
-    let mut control_socket = match TcpStream::connect(format!("localhost:{}", *CTRL_PORT)).await {
-        Ok(s) => s,
-        Err(e) => {
-            log::warn!("failed to connect to local control server {:?}", e);
-            return;
-        }
-    };
+    let mut control_socket =
+        match TcpStream::connect(format!("localhost:{}", CONFIG.control_port)).await {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("failed to connect to local control server {:?}", e);
+                return;
+            }
+        };
 
     let (mut control_r, mut control_w) = control_socket.split();
     let (mut incoming_r, mut incoming_w) = incoming.split();
@@ -35,7 +36,7 @@ pub async fn accept_connection(socket: TcpStream) {
     };
 
     // parse the host string and find our client
-    if ALLOWED_HOSTS.contains(&host) {
+    if CONFIG.allowed_hosts.contains(&host) {
         error!("redirect to homepage");
         let _ = socket.write_all(HTTP_REDIRECT_RESPONSE).await;
         return;
@@ -118,7 +119,7 @@ fn validate_host_prefix(host: &str) -> Option<String> {
     let prefix = &domain_segments[0];
     let remaining = &domain_segments[1..].join(".");
 
-    if ALLOWED_HOSTS.contains(remaining) {
+    if CONFIG.allowed_hosts.contains(remaining) {
         Some(prefix.to_string())
     } else {
         None

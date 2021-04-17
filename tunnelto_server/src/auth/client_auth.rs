@@ -1,5 +1,5 @@
 use crate::auth_db::AuthResult;
-use crate::BLOCKED_SUB_DOMAINS;
+use crate::CONFIG;
 use futures::{SinkExt, StreamExt};
 use log::error;
 use tunnelto_lib::{ClientHello, ClientHelloV1, ClientId, ClientType, ServerHello};
@@ -35,14 +35,14 @@ async fn auth_client_v1(
     client_hello: ClientHelloV1,
     mut websocket: WebSocket,
 ) -> Option<(WebSocket, ClientHandshake)> {
+    let client_id = client_hello.id.safe_id();
     let sub_domain = match client_hello.sub_domain {
         None => ServerHello::random_domain(),
 
         // otherwise, try to assign the sub domain
         Some(sub_domain) => {
             let (ws, sub_domain) =
-                match sanitize_sub_domain_and_pre_validate(websocket, sub_domain, &client_hello.id)
-                    .await
+                match sanitize_sub_domain_and_pre_validate(websocket, sub_domain, &client_id).await
                 {
                     Some(s) => s,
                     None => return None,
@@ -57,7 +57,7 @@ async fn auth_client_v1(
     Some((
         websocket,
         ClientHandshake {
-            id: client_hello.id,
+            id: client_id,
             sub_domain,
             is_anonymous: true,
         },
@@ -88,7 +88,7 @@ async fn auth_client(
             return Some((
                 websocket,
                 ClientHandshake {
-                    id: client_hello.id,
+                    id: ClientId::generate(),
                     sub_domain,
                     is_anonymous: true,
                 },
@@ -116,7 +116,7 @@ async fn auth_client(
                 return Some((
                     websocket,
                     ClientHandshake {
-                        id: client_hello.id,
+                        id: key.client_id(),
                         sub_domain,
                         is_anonymous: false,
                     },
@@ -170,7 +170,7 @@ async fn sanitize_sub_domain_and_pre_validate(
     }
 
     // ensure it's not a restricted one
-    if BLOCKED_SUB_DOMAINS.contains(&sub_domain) {
+    if CONFIG.blocked_sub_domains.contains(&sub_domain) {
         error!("invalid client hello: sub-domain restrict!");
         let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
         let _ = websocket.send(Message::binary(data)).await;

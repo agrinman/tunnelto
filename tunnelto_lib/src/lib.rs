@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -8,22 +8,28 @@ pub struct SecretKey(pub String);
 impl SecretKey {
     pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
-        Self(std::iter::repeat(())
-            .map(|_| rng.sample(rand::distributions::Alphanumeric))
-            .take(22)
-            .collect::<String>())
+        Self(
+            std::iter::repeat(())
+                .map(|_| rng.sample(rand::distributions::Alphanumeric))
+                .take(22)
+                .collect::<String>(),
+        )
     }
 
     pub fn client_id(&self) -> ClientId {
-        ClientId(base64::encode(&sha2::Sha256::digest(self.0.as_bytes()).to_vec()))
+        ClientId(base64::encode(
+            &sha2::Sha256::digest(self.0.as_bytes()).to_vec(),
+        ))
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ServerHello {
     Success {
         sub_domain: String,
+        reconnect_token: Option<String>,
+        client_id: ClientId,
     },
     SubDomainInUse,
     InvalidSubDomain,
@@ -49,9 +55,9 @@ impl ServerHello {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientHello {
-    pub id: ClientId,
     pub sub_domain: Option<String>,
-    pub client_type: ClientType
+    pub client_type: ClientType,
+    pub reconnect_token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -65,7 +71,24 @@ pub struct ClientHelloV1 {
 
 impl ClientHello {
     pub fn generate(sub_domain: Option<String>, typ: ClientType) -> Self {
-        ClientHello { id: ClientId::generate(), client_type: typ, sub_domain}
+        ClientHello {
+            client_type: typ,
+            sub_domain,
+            reconnect_token: None,
+        }
+    }
+
+    pub fn reconnect(typ: ClientType, sub_domain: String, reconnect_token: Option<String>) -> Self {
+        ClientHello {
+            sub_domain: Some(sub_domain),
+            client_type: typ,
+            reconnect_token,
+        }
+    }
+
+    pub fn into_reconnect(&mut self, sub_domain: String, reconnect_token: Option<String>) {
+        self.sub_domain = Some(sub_domain);
+        self.reconnect_token = reconnect_token;
     }
 }
 
@@ -90,8 +113,13 @@ impl ClientId {
         rand::thread_rng().fill_bytes(&mut id);
         ClientId(base64::encode_config(&id, base64::URL_SAFE_NO_PAD))
     }
-}
 
+    pub fn safe_id(self) -> ClientId {
+        ClientId(base64::encode(
+            &sha2::Sha256::digest(self.0.as_bytes()).to_vec(),
+        ))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StreamId([u8; 8]);
@@ -105,7 +133,10 @@ impl StreamId {
     }
 
     pub fn to_string(&self) -> String {
-        format!("stream_{}", base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD))
+        format!(
+            "stream_{}",
+            base64::encode_config(&self.0, base64::URL_SAFE_NO_PAD)
+        )
     }
 }
 
@@ -118,9 +149,9 @@ pub enum ControlPacket {
     Ping,
 }
 
-pub const PING_INTERVAL:u64 = 5;
+pub const PING_INTERVAL: u64 = 5;
 
-const EMPTY_STREAM:StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+const EMPTY_STREAM: StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 
 impl ControlPacket {
     pub fn serialize(self) -> Vec<u8> {
@@ -128,7 +159,7 @@ impl ControlPacket {
             ControlPacket::Init(sid) => [vec![0x01], sid.0.to_vec()].concat(),
             ControlPacket::Data(sid, data) => [vec![0x02], sid.0.to_vec(), data].concat(),
             ControlPacket::Refused(sid) => [vec![0x03], sid.0.to_vec()].concat(),
-            ControlPacket::End(sid) =>  [vec![0x04], sid.0.to_vec()].concat(),
+            ControlPacket::End(sid) => [vec![0x04], sid.0.to_vec()].concat(),
             ControlPacket::Ping => [vec![0x05], EMPTY_STREAM.0.to_vec()].concat(),
         }
     }
@@ -145,7 +176,7 @@ impl ControlPacket {
 
     pub fn deserialize(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
         if data.len() < 9 {
-            return Err("invalid DataPacket, missing stream id".into())
+            return Err("invalid DataPacket, missing stream id".into());
         }
 
         let mut stream_id = [0u8; 8];
@@ -158,7 +189,7 @@ impl ControlPacket {
             0x03 => ControlPacket::Refused(stream_id),
             0x04 => ControlPacket::End(stream_id),
             0x05 => ControlPacket::Ping,
-            _ => return Err("invalid control byte in DataPacket".into())
+            _ => return Err("invalid control byte in DataPacket".into()),
         };
 
         Ok(packet)

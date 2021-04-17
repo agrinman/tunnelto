@@ -53,6 +53,7 @@ async fn main() {
         let (restart_tx, mut restart_rx) = unbounded();
         let wormhole = run_wormhole(config.clone(), introspect_addrs.clone(), restart_tx);
         let result = futures::future::select(Box::pin(wormhole), restart_rx.next()).await;
+        config.first_run = false;
 
         match result {
             futures::future::Either::Left((wormhole_result, _)) => {
@@ -60,19 +61,19 @@ async fn main() {
                     debug!("wormhole error: {:?}", e);
                     match e {
                         Error::WebSocketError(err) => {
-                            warn!("websocket error: {:?}..restarting", err);
+                            warn!("websocket error: {:?}...restarting", err);
                             continue;
                         }
-                        _ => {}
-                    };
-                    eprintln!("Error: {}", format!("{}", e).red());
-                    return;
+                        _ => {
+                            eprintln!("Error: {}", format!("{}", e).red());
+                            return;
+                        }
+                    }
                 }
             }
             _ => {}
         };
 
-        config.first_run = false;
         info!("restarting wormhole");
     }
 }
@@ -81,7 +82,7 @@ async fn main() {
 async fn run_wormhole(
     config: Config,
     introspect: IntrospectionAddrs,
-    mut restart_tx: UnboundedSender<()>,
+    mut restart_tx: UnboundedSender<Option<Error>>,
 ) -> Result<(), Error> {
     let websocket = connect_to_wormhole(&config).await?;
 
@@ -100,20 +101,21 @@ async fn run_wormhole(
     let (tunnel_tx, mut tunnel_rx) = unbounded::<ControlPacket>();
 
     // continuously write to websocket tunnel
+    let mut restart = restart_tx.clone();
     tokio::spawn(async move {
         loop {
             let packet = match tunnel_rx.next().await {
                 Some(data) => data,
                 None => {
                     warn!("control flow didn't send anything!");
-                    let _ = restart_tx.send(()).await;
+                    let _ = restart.send(Some(Error::Timeout)).await;
                     return;
                 }
             };
 
             if let Err(e) = ws_sink.send(Message::binary(packet.serialize())).await {
                 warn!("failed to write message to tunnel websocket: {:?}", e);
-                let _ = restart_tx.send(()).await;
+                let _ = restart.send(Some(Error::WebSocketError(e))).await;
                 return;
             }
         }
@@ -123,30 +125,31 @@ async fn run_wormhole(
 
     loop {
         match ws_stream.next().await {
+            Some(Ok(message)) if message.is_close() => {
+                debug!("got close message");
+                let _ = restart_tx.send(None).await;
+                return Ok(());
+            }
             Some(Ok(message)) => {
-                match process_control_flow_message(
+                let packet = process_control_flow_message(
                     &introspect,
                     tunnel_tx.clone(),
                     message.into_data(),
                 )
                 .await
-                {
-                    Ok(packet) => {
-                        debug!("Processed packet: {:?}", packet);
-                    }
-                    Err(e) => {
-                        error!("Malformed protocol control packet: {:?}", e);
-                        return Ok(());
-                    }
-                }
+                .map_err(|e| {
+                    error!("Malformed protocol control packet: {:?}", e);
+                    Error::MalformedMessageFromServer
+                })?;
+                debug!("Processed packet: {:?}", packet);
             }
             Some(Err(e)) => {
                 warn!("websocket read error: {:?}", e);
-                return Ok(());
+                return Err(Error::Timeout);
             }
             None => {
                 warn!("websocket sent none");
-                return Ok(());
+                return Err(Error::Timeout);
             }
         }
     }
@@ -177,7 +180,7 @@ async fn connect_to_wormhole(
 
     let client_hello = ClientHello::generate(config.sub_domain.clone(), typ);
 
-    info!("connecting to wormhole as client {}", &client_hello.id);
+    info!("connecting to wormhole...");
 
     let hello = serde_json::to_vec(&client_hello).unwrap();
     websocket
@@ -197,8 +200,12 @@ async fn connect_to_wormhole(
     })?;
 
     let sub_domain = match server_hello {
-        ServerHello::Success { sub_domain } => {
-            info!("Server accepted our connection.");
+        ServerHello::Success {
+            sub_domain,
+            client_id,
+            ..
+        } => {
+            info!("Server accepted our connection. I am client_{}", client_id);
             sub_domain
         }
         ServerHello::AuthFailed => {

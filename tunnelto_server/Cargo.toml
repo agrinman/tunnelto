@@ -32,6 +32,9 @@ sha2 = "0.9.0"
 dashmap = "4.0.2"
 reqwest = { version = "0.11.2", features = ["json"] }
 trust-dns-resolver = "0.20"
+hmac-sha256 = "0.1.7"
+hex = "0.4.3"
+rand = "0.7.3"
 
 # auth handler
 rusoto_core = "0.46"

@@ -8,6 +8,9 @@ pub enum Error {
     #[error("Server denied the connection. Please check your authentication key.")]
     AuthenticationFailed,
 
+    #[error("Server sent a malformed message.")]
+    MalformedMessageFromServer,
+
     #[error("Invalid sub-domain specified.")]
     InvalidSubDomain,
 
@@ -19,4 +22,7 @@ pub enum Error {
 
     #[error("The server did not respond to our client_hello.")]
     NoResponseFromServer,
+
+    #[error("The server timed out sending us something.")]
+    Timeout,
 }

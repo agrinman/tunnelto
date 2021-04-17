@@ -711,6 +711,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hmac-sha256"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcdc571e566521512579aab40bf807c5066e1765fb36857f16ed7595c13567c6"
+
+[[package]]
 name = "hostname"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2334,10 +2340,13 @@ dependencies = [
  "chrono",
  "dashmap",
  "futures",
+ "hex",
+ "hmac-sha256",
  "httparse",
  "lazy_static",
  "log",
  "pretty_env_logger",
+ "rand 0.7.3",
  "reqwest",
  "rusoto_core",
  "rusoto_credential",

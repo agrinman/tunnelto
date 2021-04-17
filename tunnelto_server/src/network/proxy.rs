@@ -7,7 +7,7 @@ const HTTP_ERROR_PROXYING_TUNNEL_RESPONSE: &'static [u8] =
     b"HTTP/1.1 500\r\nContent-Length: 28\r\n\r\nError: Error proxying tunnel";
 
 pub async fn proxy_stream(instance: Instance, mut stream: TcpStream) {
-    let addr = SocketAddr::new(instance.ip, *crate::REMOTE_PORT);
+    let addr = SocketAddr::new(instance.ip, crate::CONFIG.remote_port);
     let mut instance = match TcpStream::connect(addr).await {
         Ok(stream) => stream,
         Err(e) => {
