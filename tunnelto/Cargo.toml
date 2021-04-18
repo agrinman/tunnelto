@@ -13,7 +13,7 @@ name = "tunnelto"
 path = "src/main.rs"
 
 [dependencies]
-tunnelto_lib = { version = "0.1.10", path = "../tunnelto_lib" }
+tunnelto_lib = { version = "0.1.14", path = "../tunnelto_lib" }
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
