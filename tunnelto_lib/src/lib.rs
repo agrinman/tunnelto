@@ -24,11 +24,14 @@ impl SecretKey {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(transparent)]
+pub struct ReconnectToken(pub String);
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum ServerHello {
     Success {
         sub_domain: String,
-        reconnect_token: Option<String>,
         client_id: ClientId,
     },
     SubDomainInUse,
@@ -55,9 +58,11 @@ impl ServerHello {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientHello {
+    /// deprecated: just send some garbage
+    id: ClientId,
     pub sub_domain: Option<String>,
     pub client_type: ClientType,
-    pub reconnect_token: Option<String>,
+    pub reconnect_token: Option<ReconnectToken>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -72,23 +77,20 @@ pub struct ClientHelloV1 {
 impl ClientHello {
     pub fn generate(sub_domain: Option<String>, typ: ClientType) -> Self {
         ClientHello {
+            id: ClientId::generate(),
             client_type: typ,
             sub_domain,
             reconnect_token: None,
         }
     }
 
-    pub fn reconnect(typ: ClientType, sub_domain: String, reconnect_token: Option<String>) -> Self {
+    pub fn reconnect(reconnect_token: ReconnectToken) -> Self {
         ClientHello {
-            sub_domain: Some(sub_domain),
-            client_type: typ,
-            reconnect_token,
+            id: ClientId::generate(),
+            sub_domain: None,
+            client_type: ClientType::Anonymous,
+            reconnect_token: Some(reconnect_token),
         }
-    }
-
-    pub fn into_reconnect(&mut self, sub_domain: String, reconnect_token: Option<String>) {
-        self.sub_domain = Some(sub_domain);
-        self.reconnect_token = reconnect_token;
     }
 }
 
@@ -146,12 +148,13 @@ pub enum ControlPacket {
     Data(StreamId, Vec<u8>),
     Refused(StreamId),
     End(StreamId),
-    Ping,
+    Ping(Option<ReconnectToken>),
 }
 
-pub const PING_INTERVAL: u64 = 5;
+pub const PING_INTERVAL: u64 = 30;
 
 const EMPTY_STREAM: StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+const TOKEN_STREAM: StreamId = StreamId([0xF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]);
 
 impl ControlPacket {
     pub fn serialize(self) -> Vec<u8> {
@@ -160,13 +163,18 @@ impl ControlPacket {
             ControlPacket::Data(sid, data) => [vec![0x02], sid.0.to_vec(), data].concat(),
             ControlPacket::Refused(sid) => [vec![0x03], sid.0.to_vec()].concat(),
             ControlPacket::End(sid) => [vec![0x04], sid.0.to_vec()].concat(),
-            ControlPacket::Ping => [vec![0x05], EMPTY_STREAM.0.to_vec()].concat(),
+            ControlPacket::Ping(tok) => {
+                let data = tok.map_or(EMPTY_STREAM.0.to_vec(), |t| {
+                    vec![TOKEN_STREAM.0.to_vec(), t.0.into_bytes()].concat()
+                });
+                [vec![0x05], data].concat()
+            }
         }
     }
 
     pub fn packet_type(&self) -> &str {
         match &self {
-            ControlPacket::Ping => "PING",
+            ControlPacket::Ping(_) => "PING",
             ControlPacket::Init(_) => "INIT STREAM",
             ControlPacket::Data(_, _) => "STREAM DATA",
             ControlPacket::Refused(_) => "REFUSED",
@@ -188,7 +196,15 @@ impl ControlPacket {
             0x02 => ControlPacket::Data(stream_id, data[9..].to_vec()),
             0x03 => ControlPacket::Refused(stream_id),
             0x04 => ControlPacket::End(stream_id),
-            0x05 => ControlPacket::Ping,
+            0x05 => {
+                if stream_id == EMPTY_STREAM {
+                    ControlPacket::Ping(None)
+                } else {
+                    ControlPacket::Ping(Some(ReconnectToken(
+                        String::from_utf8_lossy(&data[9..]).to_string(),
+                    )))
+                }
+            }
             _ => return Err("invalid control byte in DataPacket".into()),
         };
 

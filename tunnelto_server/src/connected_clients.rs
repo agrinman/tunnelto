@@ -5,6 +5,7 @@ use dashmap::DashMap;
 pub struct ConnectedClient {
     pub id: ClientId,
     pub host: String,
+    pub is_anonymous: bool,
     pub tx: UnboundedSender<ControlPacket>,
 }
 

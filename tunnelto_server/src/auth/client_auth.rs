@@ -1,5 +1,6 @@
+use crate::auth::reconnect_token::ReconnectTokenPayload;
 use crate::auth_db::AuthResult;
-use crate::CONFIG;
+use crate::{ReconnectToken, CONFIG};
 use futures::{SinkExt, StreamExt};
 use log::error;
 use tunnelto_lib::{ClientHello, ClientHelloV1, ClientId, ClientType, ServerHello};
@@ -81,14 +82,23 @@ async fn auth_client(
 
     let (auth_key, client_id, requested_sub_domain) = match client_hello.client_type {
         ClientType::Anonymous => {
-            let sub_domain = match client_hello.sub_domain {
-                Some(sd) => ServerHello::prefixed_random_domain(&sd),
-                None => ServerHello::random_domain(),
-            };
+            // determine the client and subdomain
+            let (client_id, sub_domain) =
+                match (client_hello.reconnect_token, client_hello.sub_domain) {
+                    (Some(token), _) => {
+                        return handle_reconnect_token(token, websocket).await;
+                    }
+                    (None, Some(sd)) => (
+                        ClientId::generate(),
+                        ServerHello::prefixed_random_domain(&sd),
+                    ),
+                    (None, None) => (ClientId::generate(), ServerHello::random_domain()),
+                };
+
             return Some((
                 websocket,
                 ClientHandshake {
-                    id: ClientId::generate(),
+                    id: client_id,
                     sub_domain,
                     is_anonymous: true,
                 },
@@ -112,15 +122,19 @@ async fn auth_client(
                 (key, client_id, sub_domain)
             }
             None => {
-                let sub_domain = ServerHello::random_domain();
-                return Some((
-                    websocket,
-                    ClientHandshake {
-                        id: key.client_id(),
-                        sub_domain,
-                        is_anonymous: false,
-                    },
-                ));
+                return if let Some(token) = client_hello.reconnect_token {
+                    handle_reconnect_token(token, websocket).await
+                } else {
+                    let sub_domain = ServerHello::random_domain();
+                    Some((
+                        websocket,
+                        ClientHandshake {
+                            id: ClientId::generate(),
+                            sub_domain,
+                            is_anonymous: true,
+                        },
+                    ))
+                }
             }
         },
     };
@@ -154,6 +168,35 @@ async fn auth_client(
     ))
 }
 
+async fn handle_reconnect_token(
+    token: ReconnectToken,
+    mut websocket: WebSocket,
+) -> Option<(WebSocket, ClientHandshake)> {
+    let payload = match ReconnectTokenPayload::verify(token, &CONFIG.master_sig_key) {
+        Ok(payload) => payload,
+        Err(e) => {
+            error!("invalid reconnect token: {:?}", e);
+            let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
+            let _ = websocket.send(Message::binary(data)).await;
+            return None;
+        }
+    };
+
+    log::debug!(
+        "accepting reconnect token from client: {}",
+        &payload.client_id
+    );
+
+    Some((
+        websocket,
+        ClientHandshake {
+            id: payload.client_id,
+            sub_domain: payload.sub_domain,
+            is_anonymous: true,
+        },
+    ))
+}
+
 async fn sanitize_sub_domain_and_pre_validate(
     mut websocket: WebSocket,
     requested_sub_domain: String,
@@ -162,8 +205,13 @@ async fn sanitize_sub_domain_and_pre_validate(
     // ignore uppercase
     let sub_domain = requested_sub_domain.to_lowercase();
 
-    if sub_domain.chars().filter(|c| !c.is_alphanumeric()).count() > 0 {
-        error!("invalid client hello: only alphanumeric chars allowed!");
+    if sub_domain
+        .chars()
+        .filter(|c| !(c.is_alphanumeric() || c == &'-'))
+        .count()
+        > 0
+    {
+        error!("invalid client hello: only alphanumeric/hyphen chars allowed!");
         let data = serde_json::to_vec(&ServerHello::InvalidSubDomain).unwrap_or_default();
         let _ = websocket.send(Message::binary(data)).await;
         return None;

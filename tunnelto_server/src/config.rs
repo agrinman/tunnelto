@@ -30,6 +30,9 @@ pub struct Config {
 
     /// our signature key
     pub master_sig_key: SigKey,
+
+    /// Instance DNS discovery domain for gossip protocol
+    pub gossip_dns_host: Option<String>,
 }
 
 impl Config {
@@ -49,6 +52,12 @@ impl Config {
             SigKey::generate()
         };
 
+        let gossip_dns_host = if let Some(app_name) = std::env::var("FLY_APP_NAME").ok() {
+            Some(format!("global.{}.internal", app_name))
+        } else {
+            None
+        };
+
         Config {
             allowed_hosts,
             blocked_sub_domains,
@@ -56,6 +65,7 @@ impl Config {
             remote_port: get_port("PORT", 8080),
             internal_network_port: get_port("NET_PORT", 6000),
             master_sig_key,
+            gossip_dns_host,
         }
     }
 }

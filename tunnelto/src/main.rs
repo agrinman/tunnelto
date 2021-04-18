@@ -24,12 +24,15 @@ pub use tunnelto_lib::*;
 
 use crate::introspect::IntrospectionAddrs;
 use colored::Colorize;
+use futures::future::Either;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 pub type ActiveStreams = Arc<RwLock<HashMap<StreamId, UnboundedSender<StreamMessage>>>>;
 
 lazy_static::lazy_static! {
     pub static ref ACTIVE_STREAMS:ActiveStreams = Arc::new(RwLock::new(HashMap::new()));
+    pub static ref RECONNECT_TOKEN: Arc<Mutex<Option<ReconnectToken>>> = Arc::new(Mutex::new(None));
 }
 
 #[derive(Debug, Clone)]
@@ -56,20 +59,19 @@ async fn main() {
         config.first_run = false;
 
         match result {
-            futures::future::Either::Left((wormhole_result, _)) => {
-                if let Err(e) = wormhole_result {
-                    debug!("wormhole error: {:?}", e);
-                    match e {
-                        Error::WebSocketError(err) => {
-                            warn!("websocket error: {:?}...restarting", err);
-                            continue;
-                        }
-                        _ => {
-                            eprintln!("Error: {}", format!("{}", e).red());
-                            return;
-                        }
-                    }
+            Either::Left((Err(e), _)) => match e {
+                Error::WebSocketError(_) | Error::NoResponseFromServer | Error::Timeout => {
+                    error!("Control error: {:?}. Retrying in 5 seconds.", e);
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                 }
+                _ => {
+                    eprintln!("Error: {}", format!("{}", e).red());
+                    return;
+                }
+            },
+            Either::Right((Some(e), _)) => {
+                warn!("restarting in 3 seconds...from error: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(3)).await;
             }
             _ => {}
         };
@@ -141,7 +143,7 @@ async fn run_wormhole(
                     error!("Malformed protocol control packet: {:?}", e);
                     Error::MalformedMessageFromServer
                 })?;
-                debug!("Processed packet: {:?}", packet);
+                debug!("Processed packet: {:?}", packet.packet_type());
             }
             Some(Err(e)) => {
                 warn!("websocket read error: {:?}", e);
@@ -173,12 +175,20 @@ async fn connect_to_wormhole(
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
-    let typ = match config.secret_key.clone() {
-        Some(secret_key) => ClientType::Auth { key: secret_key },
-        None => ClientType::Anonymous,
+    let client_hello = match config.secret_key.clone() {
+        Some(secret_key) => ClientHello::generate(
+            config.sub_domain.clone(),
+            ClientType::Auth { key: secret_key },
+        ),
+        None => {
+            // if we have a reconnect token, use it.
+            if let Some(reconnect) = RECONNECT_TOKEN.lock().await.clone() {
+                ClientHello::reconnect(reconnect)
+            } else {
+                ClientHello::generate(config.sub_domain.clone(), ClientType::Anonymous)
+            }
+        }
     };
-
-    let client_hello = ClientHello::generate(config.sub_domain.clone(), typ);
 
     info!("connecting to wormhole...");
 
@@ -263,9 +273,13 @@ async fn process_control_flow_message(
         ControlPacket::Init(stream_id) => {
             info!("stream[{:?}] -> init", stream_id.to_string());
         }
-        ControlPacket::Ping => {
-            log::info!("got ping");
-            let _ = tunnel_tx.send(ControlPacket::Ping).await;
+        ControlPacket::Ping(reconnect_token) => {
+            log::info!("got ping. reconnect_token={}", reconnect_token.is_some());
+
+            if let Some(reconnect) = reconnect_token {
+                let _ = RECONNECT_TOKEN.lock().await.replace(reconnect.clone());
+            }
+            let _ = tunnel_tx.send(ControlPacket::Ping(None)).await;
         }
         ControlPacket::Refused(_) => return Err("unexpected control packet".into()),
         ControlPacket::End(stream_id) => {

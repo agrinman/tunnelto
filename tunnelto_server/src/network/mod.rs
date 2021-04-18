@@ -33,14 +33,16 @@ pub struct Instance {
 }
 
 impl Instance {
-    fn get_app_name() -> String {
-        std::env::var("FLY_APP_NAME").expect("FLY_APP_NAME env not set")
-    }
-
     /// get all instances where our app runs
     async fn get_instances() -> Result<Vec<Instance>, Error> {
+        let query = if let Some(dns) = crate::CONFIG.gossip_dns_host.clone() {
+            dns
+        } else {
+            log::warn!("warning! gossip mode disabled!");
+            return Ok(vec![]);
+        };
+
         log::debug!("querying app instances");
-        let query = format!("global.{}.internal", Self::get_app_name());
 
         let resolver = TokioAsyncResolver::tokio_from_system_conf()?;
 
@@ -81,6 +83,11 @@ pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error
         .await?
         .into_iter()
         .map(|i| i.serves_host(host).boxed());
+
+    if instances.len() == 0 {
+        return Err(Error::DoesNotServeHost);
+    }
+
     let instance = select_ok(instances).await?.0;
     log::debug!("Found instance: {:?} serving host: {:?}", &instance, host);
     Ok(instance)

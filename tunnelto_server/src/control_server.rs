@@ -1,4 +1,7 @@
 pub use super::*;
+use crate::auth::reconnect_token::ReconnectTokenPayload;
+use crate::client_auth::ClientHandshake;
+use chrono::Utc;
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -16,17 +19,18 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
 }
 
 async fn handle_new_connection(websocket: WebSocket) {
-    let (websocket, client_id, sub_domain) = match try_client_handshake(websocket).await {
+    let (websocket, handshake) = match try_client_handshake(websocket).await {
         Some(ws) => ws,
         None => return,
     };
 
-    log::debug!("open tunnel: {}.", &sub_domain);
+    log::debug!("open tunnel: {}.", &handshake.sub_domain);
 
     let (tx, rx) = unbounded::<ControlPacket>();
     let mut client = ConnectedClient {
-        id: client_id,
-        host: sub_domain,
+        id: handshake.id,
+        host: handshake.sub_domain,
+        is_anonymous: handshake.is_anonymous,
         tx,
     };
     Connections::add(client.clone());
@@ -49,7 +53,22 @@ async fn handle_new_connection(websocket: WebSocket) {
     tokio::spawn(async move {
         loop {
             log::trace!("sending ping");
-            match client.tx.send(ControlPacket::Ping).await {
+
+            // create a new reconnect token for anonymous clients
+            let reconnect_token = if client.is_anonymous {
+                ReconnectTokenPayload {
+                    sub_domain: client.host.clone(),
+                    client_id: client.id.clone(),
+                    expires: Utc::now() + chrono::Duration::minutes(2),
+                }
+                .into_token(&CONFIG.master_sig_key)
+                .map_err(|e| error!("unable to create reconnect token: {:?}", e))
+                .ok()
+            } else {
+                None
+            };
+
+            match client.tx.send(ControlPacket::Ping(reconnect_token)).await {
                 Ok(_) => {}
                 Err(e) => {
                     log::debug!("Failed to send ping: {:?}, removing client", e);
@@ -63,7 +82,7 @@ async fn handle_new_connection(websocket: WebSocket) {
     });
 }
 
-async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, ClientId, String)> {
+async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, ClientHandshake)> {
     // Authenticate client handshake
     let (mut websocket, client_handshake) = client_auth::auth_client_handshake(websocket).await?;
 
@@ -71,9 +90,9 @@ async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, Client
     let data = serde_json::to_vec(&ServerHello::Success {
         sub_domain: client_handshake.sub_domain.clone(),
         client_id: client_handshake.id.clone(),
-        reconnect_token: None, // TODO: add this
     })
     .unwrap_or_default();
+
     let send_result = websocket.send(Message::binary(data)).await;
     if let Err(e) = send_result {
         error!("aborting...failed to write server hello: {:?}", e);
@@ -89,7 +108,7 @@ async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, Client
             ""
         }
     );
-    Some((websocket, client_handshake.id, client_handshake.sub_domain))
+    Some((websocket, client_handshake))
 }
 
 /// Send the client a "stream init" message
@@ -158,7 +177,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 error!("invalid protocol control::init message");
                 continue;
             }
-            ControlPacket::Ping => {
+            ControlPacket::Ping(_) => {
                 log::trace!("pong");
                 Connections::add(client.clone());
                 continue;

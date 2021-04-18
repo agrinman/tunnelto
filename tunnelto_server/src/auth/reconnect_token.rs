@@ -2,7 +2,7 @@ use crate::auth::{SigKey, Signature};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tunnelto_lib::ClientId;
+use tunnelto_lib::{ClientId, ReconnectToken};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -33,21 +33,9 @@ impl ReconnectTokenPayload {
         let tok = base64::encode(&serde_json::to_vec(&tok)?);
         Ok(ReconnectToken(tok))
     }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct ReconnectTokenInner {
-    payload: String,
-    sig: Signature,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(transparent)]
-pub struct ReconnectToken(String);
-
-impl ReconnectToken {
-    pub fn verify(self, key: &SigKey) -> Result<ReconnectTokenPayload, Error> {
-        let tok = base64::decode(self.0.as_str())?;
+    pub fn verify(tok: ReconnectToken, key: &SigKey) -> Result<ReconnectTokenPayload, Error> {
+        let tok = base64::decode(tok.0.as_str())?;
         let tok: ReconnectTokenInner = serde_json::from_slice(&tok)?;
 
         if !key.verify(tok.payload.as_bytes(), &tok.sig) {
@@ -62,4 +50,10 @@ impl ReconnectToken {
 
         Ok(payload)
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ReconnectTokenInner {
+    payload: String,
+    sig: Signature,
 }
