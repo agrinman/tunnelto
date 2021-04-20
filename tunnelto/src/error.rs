@@ -17,6 +17,9 @@ pub enum Error {
     #[error("Cannot use this sub-domain, it is already taken.")]
     SubDomainInUse,
 
+    #[error("{0}")]
+    ServerError(String),
+
     #[error("The server responded with an invalid response.")]
     ServerReplyInvalid,
 

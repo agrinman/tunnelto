@@ -37,6 +37,7 @@ pub enum ServerHello {
     SubDomainInUse,
     InvalidSubDomain,
     AuthFailed,
+    Error(String),
 }
 
 impl ServerHello {

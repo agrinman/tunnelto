@@ -227,6 +227,7 @@ async fn connect_to_wormhole(
         ServerHello::SubDomainInUse => {
             return Err(Error::SubDomainInUse);
         }
+        ServerHello::Error(error) => return Err(Error::ServerError(error)),
     };
 
     // either first run or the tunnel changed domains
@@ -240,8 +241,13 @@ async fn connect_to_wormhole(
         }
 
         if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) {
-            eprintln!("{}",
-                      ">>> Notice: to access the full sub-domain feature, get your a free authentication key at https://dashboard.tunnelto.dev.".yellow());
+            if config.secret_key.is_some() {
+                eprintln!("{}",
+                          ">>> Notice: to use custom sub-domains feature, please upgrade your billing plan at https://dashboard.tunnelto.dev.".yellow());
+            } else {
+                eprintln!("{}",
+                          ">>> Notice: to access the sub-domain feature, get your authentication key at https://dashboard.tunnelto.dev.".yellow());
+            }
         }
 
         let p = match (config.scheme.as_str(), config.local_port.as_ref()) {

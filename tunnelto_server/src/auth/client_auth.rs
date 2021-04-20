@@ -145,6 +145,10 @@ async fn auth_client(
         .await
     {
         Ok(AuthResult::Available) | Ok(AuthResult::ReservedByYou) => requested_sub_domain,
+        Ok(AuthResult::ReservedByYouButDelinquent) => {
+            // note: delinquent payments get a random suffix
+            ServerHello::prefixed_random_domain(&requested_sub_domain)
+        }
         Ok(AuthResult::ReservedByOther) => {
             let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();
             let _ = websocket.send(Message::binary(data)).await;
