@@ -13,6 +13,7 @@ use uuid::Uuid;
 use warp::http::HeaderMap;
 use warp::http::Method;
 use warp::path::FullPath;
+use warp::ws::{WebSocket, Ws};
 use warp::Filter;
 
 type HttpClient = hyper::Client<HttpsConnector<HttpConnector>>;
@@ -90,6 +91,7 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
     };
 
     let local_addr = format!("{}://{}{}", &config.scheme, &config.local_host, port);
+    let local_addr_clone = local_addr.clone();
 
     let https = hyper_tls::HttpsConnector::new();
     let http_client = hyper::Client::builder().build::<_, hyper::Body>(https);
@@ -109,8 +111,21 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .and(get_client())
         .and_then(forward);
 
+    let intercept_ws = warp::any()
+        .and(warp::any().map(move || local_addr_clone.clone()))
+        .and(warp::path::full())
+        .and(opt_raw_query())
+        .and(warp::ws())
+        .map(
+            move |addr: String, path: FullPath, query: Option<String>, ws: Ws| {
+                ws.on_upgrade(move |w: WebSocket| async {
+                    forward_websocket(addr, path, query, w).await
+                })
+            },
+        );
+
     let (forward_address, intercept_server) =
-        warp::serve(intercept).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)));
+        warp::serve(intercept.or(intercept_ws)).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)));
     tokio::spawn(intercept_server);
 
     let css = warp::get().and(warp::path!("static" / "css" / "styles.css").map(|| {
@@ -285,6 +300,43 @@ async fn forward(
         parts,
         response_data,
     )))
+}
+
+async fn forward_websocket(
+    local_addr: String,
+    path: FullPath,
+    query: Option<String>,
+    websocket: WebSocket,
+) {
+    log::debug!("connecting to websocket");
+
+    let query_str = if let Some(query) = query.as_ref() {
+        format!("?{}", query)
+    } else {
+        String::new()
+    };
+
+    let url = format!("{}{}{}", local_addr, path.as_str(), query_str);
+    log::debug!("forwarding to: {}", &url);
+
+    forward_websocket_inner(url, websocket).await.map_err(|e| {
+        eprint!("websocket error occurred: {:?}", e);
+    });
+}
+
+async fn forward_websocket_inner(
+    url: String,
+    incoming: WebSocket,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut local, _) = tokio_tungstenite::connect_async(&url).await?;
+    let mut local = local.split();
+    let mut incoming = incoming.split();
+
+    let forward_left = tokio::io::copy(&mut local.0, &mut incoming.1);
+    let forward_right = tokio::io::copy(&mut incoming.0, &mut local.1);
+    Ok(futures::future::try_join(forward_left, forward_right)
+        .await
+        .map(|_| ())?)
 }
 
 #[derive(Debug, Clone, askama::Template)]
