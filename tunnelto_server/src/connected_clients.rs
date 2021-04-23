@@ -1,12 +1,23 @@
 use super::*;
 use dashmap::DashMap;
+use std::fmt::Formatter;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConnectedClient {
     pub id: ClientId,
     pub host: String,
     pub is_anonymous: bool,
     pub tx: UnboundedSender<ControlPacket>,
+}
+
+impl std::fmt::Debug for ConnectedClient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectedClient")
+            .field("id", &self.id)
+            .field("sub", &self.host)
+            .field("anon", &self.is_anonymous)
+            .finish()
+    }
 }
 
 pub struct Connections {
@@ -37,12 +48,12 @@ impl Connections {
             .get(&client.host)
             .map_or(false, |c| c.id == client.id)
         {
-            log::debug!("dropping sub-domain: {}", &client.host);
+            tracing::debug!("dropping sub-domain: {}", &client.host);
             CONNECTIONS.hosts.remove(&client.host);
         };
 
         CONNECTIONS.clients.remove(&client.id);
-        log::debug!("rm client: {}", &client.id);
+        tracing::debug!("rm client: {}", &client.id);
 
         // // drop all the streams
         // // if there are no more tunnel clients

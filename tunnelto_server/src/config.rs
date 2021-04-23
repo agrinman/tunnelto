@@ -33,6 +33,9 @@ pub struct Config {
 
     /// Instance DNS discovery domain for gossip protocol
     pub gossip_dns_host: Option<String>,
+
+    /// Observability API key
+    pub honeycomb_api_key: Option<String>,
 }
 
 impl Config {
@@ -48,15 +51,15 @@ impl Config {
         let master_sig_key = if let Ok(key) = std::env::var("MASTER_SIG_KEY") {
             SigKey::from_hex(&key).expect("invalid master key: not hex or length incorrect")
         } else {
-            log::warn!("WARNING! generating ephemeral signature key!");
+            tracing::warn!("WARNING! generating ephemeral signature key!");
             SigKey::generate()
         };
 
-        let gossip_dns_host = if let Some(app_name) = std::env::var("FLY_APP_NAME").ok() {
-            Some(format!("global.{}.internal", app_name))
-        } else {
-            None
-        };
+        let gossip_dns_host = std::env::var("FLY_APP_NAME")
+            .map(|app_name| format!("global.{}.internal", app_name))
+            .ok();
+
+        let honeycomb_api_key = std::env::var("HONEYCOMB_API_KEY").ok();
 
         Config {
             allowed_hosts,
@@ -66,6 +69,7 @@ impl Config {
             internal_network_port: get_port("NET_PORT", 6000),
             master_sig_key,
             gossip_dns_host,
+            honeycomb_api_key,
         }
     }
 }

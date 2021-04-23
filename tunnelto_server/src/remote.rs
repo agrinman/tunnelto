@@ -2,13 +2,14 @@ use super::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
+use tracing::{error, Instrument};
 
 async fn direct_to_control(mut incoming: TcpStream) {
     let mut control_socket =
         match TcpStream::connect(format!("localhost:{}", CONFIG.control_port)).await {
             Ok(s) => s,
             Err(e) => {
-                log::warn!("failed to connect to local control server {:?}", e);
+                tracing::warn!("failed to connect to local control server {:?}", e);
                 return;
             }
         };
@@ -22,7 +23,7 @@ async fn direct_to_control(mut incoming: TcpStream) {
     match futures::future::join(join_1, join_2).await {
         (Ok(_), Ok(_)) => {}
         (Err(e), _) | (_, Err(e)) => {
-            log::error!("directing stream to control failed: {:?}", e);
+            tracing::error!("directing stream to control failed: {:?}", e);
         }
     }
 }
@@ -91,14 +92,20 @@ pub async fn accept_connection(socket: TcpStream) {
     ACTIVE_STREAMS.insert(stream_id.clone(), active_stream.clone());
 
     // read from socket, write to client
-    tokio::spawn(async move {
-        process_tcp_stream(active_stream, stream).await;
-    });
+    tokio::spawn(
+        async move {
+            process_tcp_stream(active_stream, stream).await;
+        }
+        .instrument(observability::begin_trace("process_tcp_stream")),
+    );
 
     // read from client, write to socket
-    tokio::spawn(async move {
-        tunnel_to_stream(stream_id, sink, queue_rx).await;
-    });
+    tokio::spawn(
+        async move {
+            tunnel_to_stream(stream_id, sink, queue_rx).await;
+        }
+        .instrument(observability::begin_trace("tunnel_to_stream")),
+    );
 }
 
 fn validate_host_prefix(host: &str) -> Option<String> {
@@ -140,13 +147,14 @@ const HTTP_OK_RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r
 const HEALTH_CHECK_PATH: &'static [u8] = b"/0xDEADBEEF_HEALTH_CHECK";
 
 /// Filter incoming remote streams
+#[tracing::instrument(skip(socket))]
 async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, String)> {
     /// Note we return out if the host header is not found
     /// within the first 4kb of the request.
     const MAX_HEADER_PEAK: usize = 4096;
     let mut buf = vec![0; MAX_HEADER_PEAK]; //1kb
 
-    log::debug!("checking stream headers");
+    tracing::debug!("checking stream headers");
 
     let n = match socket.peek(&mut buf).await {
         Ok(n) => n,
@@ -158,11 +166,11 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
 
     // make sure we're not peeking the same header bytes
     if n == 0 {
-        log::debug!("unable to peek header bytes");
+        tracing::debug!("unable to peek header bytes");
         return None;
     }
 
-    log::debug!("peeked {} stream bytes ", n);
+    tracing::debug!("peeked {} stream bytes ", n);
 
     let mut headers = [httparse::EMPTY_HEADER; 64]; // 30 seems like a generous # of headers
     let mut req = httparse::Request::new(&mut headers);
@@ -194,11 +202,12 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
         return Some((socket, host.to_string()));
     }
 
-    log::debug!("Found no host header, dropping connection.");
+    tracing::debug!("Found no host header, dropping connection.");
     None
 }
 
 /// Process Messages from the control path in & out of the remote stream
+#[tracing::instrument(skip(tunnel_stream, tcp_stream))]
 async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: ReadHalf<TcpStream>) {
     // send initial control stream init to client
     control_server::send_client_stream_init(tunnel_stream.clone()).await;
@@ -252,6 +261,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
     }
 }
 
+#[tracing::instrument(skip(sink, queue))]
 async fn tunnel_to_stream(
     stream_id: StreamId,
     mut sink: WriteHalf<TcpStream>,

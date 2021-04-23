@@ -11,7 +11,6 @@ use tokio::net::TcpListener;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::stream::{SplitSink, SplitStream};
 use lazy_static::lazy_static;
-use log::{error, info};
 
 mod connected_clients;
 use self::connected_clients::*;
@@ -31,6 +30,14 @@ mod config;
 pub use self::config::Config;
 mod network;
 
+mod observability;
+
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry;
+
+use tracing::{error, info, Instrument};
+
 lazy_static! {
     pub static ref CONNECTIONS: Connections = Connections::new();
     pub static ref ACTIVE_STREAMS: ActiveStreams = Arc::new(DashMap::new());
@@ -41,7 +48,32 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
+    // setup observability
+    if let Some(api_key) = CONFIG.honeycomb_api_key.clone() {
+        info!("configuring observability layer");
+
+        let honeycomb_config = libhoney::Config {
+            options: libhoney::client::Options {
+                api_key,
+                dataset: "t2-service".to_string(),
+                ..libhoney::client::Options::default()
+            },
+            transmission_options: libhoney::transmission::Options::default(),
+        };
+
+        let telemetry_layer =
+            tracing_honeycomb::new_honeycomb_telemetry_layer("t2-service", honeycomb_config);
+
+        // NOTE: the underlying subscriber MUST be the Registry subscriber
+        let subscriber = registry::Registry::default() // provide underlying span data store
+            .with(LevelFilter::DEBUG) // filter out low-level debug tracing (eg tokio executor)
+            .with(tracing_subscriber::fmt::Layer::default()) // log to stdout
+            .with(telemetry_layer); // publish to honeycomb backend
+
+        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+    }
+
+    tracing::info!("starting server!");
 
     control_server::spawn(([0, 0, 0, 0], CONFIG.control_port));
     info!("started tunnelto server on 0.0.0.0:{}", CONFIG.control_port);
@@ -69,8 +101,11 @@ async fn main() {
             }
         };
 
-        tokio::spawn(async move {
-            remote::accept_connection(socket).await;
-        });
+        tokio::spawn(
+            async move {
+                remote::accept_connection(socket).await;
+            }
+            .instrument(observability::begin_trace("remote_connect")),
+        );
     }
 }

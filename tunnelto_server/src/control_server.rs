@@ -4,18 +4,24 @@ use crate::client_auth::ClientHandshake;
 use chrono::Utc;
 use std::net::SocketAddr;
 use std::time::Duration;
+use tracing::{error, Instrument};
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| {
-        log::info!("Health Check #2 triggered");
+        tracing::info!("Health Check #2 triggered");
         "ok"
     });
-    let client_conn = warp::path("wormhole")
-        .and(warp::ws())
-        .map(move |ws: Ws| ws.on_upgrade(handle_new_connection));
+    let client_conn = warp::path("wormhole").and(warp::ws()).map(move |ws: Ws| {
+        ws.on_upgrade(|w| {
+            async move { handle_new_connection(w).await }
+                .instrument(observability::begin_trace("handle_websocket"))
+        })
+    });
+
+    let routes = client_conn.or(health_check);
 
     // spawn our websocket control server
-    tokio::spawn(warp::serve(client_conn.or(health_check)).run(addr.into()));
+    tokio::spawn(warp::serve(routes).run(addr.into()));
 }
 
 async fn handle_new_connection(websocket: WebSocket) {
@@ -24,7 +30,7 @@ async fn handle_new_connection(websocket: WebSocket) {
         None => return,
     };
 
-    log::debug!("open tunnel: {}.", &handshake.sub_domain);
+    tracing::info!(?handshake.sub_domain, "open tunnel");
 
     let (tx, rx) = unbounded::<ControlPacket>();
     let mut client = ConnectedClient {
@@ -39,47 +45,56 @@ async fn handle_new_connection(websocket: WebSocket) {
 
     let client_clone = client.clone();
 
-    tokio::spawn(async move {
-        tunnel_client(client_clone, sink, rx).await;
-    });
+    tokio::spawn(
+        async move {
+            tunnel_client(client_clone, sink, rx).await;
+        }
+        .instrument(observability::begin_trace("tunnel_client")),
+    );
 
     let client_clone = client.clone();
 
-    tokio::spawn(async move {
-        process_client_messages(client_clone, stream).await;
-    });
+    tokio::spawn(
+        async move {
+            process_client_messages(client_clone, stream).await;
+        }
+        .instrument(observability::begin_trace("process_client")),
+    );
 
     // play ping pong
-    tokio::spawn(async move {
-        loop {
-            log::trace!("sending ping");
+    tokio::spawn(
+        async move {
+            loop {
+                tracing::trace!("sending ping");
 
-            // create a new reconnect token for anonymous clients
-            let reconnect_token = if client.is_anonymous {
-                ReconnectTokenPayload {
-                    sub_domain: client.host.clone(),
-                    client_id: client.id.clone(),
-                    expires: Utc::now() + chrono::Duration::minutes(2),
-                }
-                .into_token(&CONFIG.master_sig_key)
-                .map_err(|e| error!("unable to create reconnect token: {:?}", e))
-                .ok()
-            } else {
-                None
-            };
+                // create a new reconnect token for anonymous clients
+                let reconnect_token = if client.is_anonymous {
+                    ReconnectTokenPayload {
+                        sub_domain: client.host.clone(),
+                        client_id: client.id.clone(),
+                        expires: Utc::now() + chrono::Duration::minutes(2),
+                    }
+                    .into_token(&CONFIG.master_sig_key)
+                    .map_err(|e| error!("unable to create reconnect token: {:?}", e))
+                    .ok()
+                } else {
+                    None
+                };
 
-            match client.tx.send(ControlPacket::Ping(reconnect_token)).await {
-                Ok(_) => {}
-                Err(e) => {
-                    log::debug!("Failed to send ping: {:?}, removing client", e);
-                    Connections::remove(&client);
-                    return;
-                }
-            };
+                match client.tx.send(ControlPacket::Ping(reconnect_token)).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::debug!("Failed to send ping: {:?}, removing client", e);
+                        Connections::remove(&client);
+                        return;
+                    }
+                };
 
-            tokio::time::sleep(Duration::new(PING_INTERVAL, 0)).await;
+                tokio::time::sleep(Duration::new(PING_INTERVAL, 0)).await;
+            }
         }
-    });
+        .instrument(observability::begin_trace("control_ping")),
+    );
 }
 
 async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, ClientHandshake)> {
@@ -130,6 +145,7 @@ pub async fn send_client_stream_init(mut stream: ActiveStream) {
 }
 
 /// Process client control messages
+#[tracing::instrument(skip(client_conn))]
 async fn process_client_messages(client: ConnectedClient, mut client_conn: SplitStream<WebSocket>) {
     loop {
         let result = client_conn.next().await;
@@ -141,7 +157,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
             }
             // handle close with reason
             Some(Ok(msg)) if msg.is_close() && !msg.as_bytes().is_empty() => {
-                log::debug!("got close, reason = {:?}", msg.to_str());
+                tracing::debug!("got close, reason = {:?}", msg.to_str());
                 Connections::remove(&client);
                 return;
             }
@@ -155,7 +171,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
         let packet = match ControlPacket::deserialize(&message) {
             Ok(packet) => packet,
             Err(e) => {
-                eprintln!("invalid data packet: {:?}", e);
+                error!("invalid data packet: {:?}", e);
                 continue;
             }
         };
@@ -170,7 +186,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 (stream_id, StreamMessage::Data(data))
             }
             ControlPacket::Refused(stream_id) => {
-                log::info!("tunnel says: refused");
+                tracing::info!("tunnel says: refused");
                 (stream_id, StreamMessage::TunnelRefused)
             }
             ControlPacket::Init(_) | ControlPacket::End(_) => {
@@ -178,7 +194,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 continue;
             }
             ControlPacket::Ping(_) => {
-                log::trace!("pong");
+                tracing::trace!("pong");
                 Connections::add(client.clone());
                 continue;
             }
@@ -188,12 +204,13 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
 
         if let Some(mut stream) = stream {
             let _ = stream.tx.send(message).await.map_err(|e| {
-                log::error!("Failed to send to stream tx: {:?}", e);
+                tracing::error!("Failed to send to stream tx: {:?}", e);
             });
         }
     }
 }
 
+#[tracing::instrument(skip(sink, queue))]
 async fn tunnel_client(
     client: ConnectedClient,
     mut sink: SplitSink<WebSocket, Message>,
@@ -204,7 +221,7 @@ async fn tunnel_client(
             Some(packet) => {
                 let result = sink.send(Message::binary(packet.serialize())).await;
                 if result.is_err() {
-                    eprintln!("client disconnected: aborting.");
+                    error!("client disconnected: aborting.");
                     Connections::remove(&client);
                     return;
                 }

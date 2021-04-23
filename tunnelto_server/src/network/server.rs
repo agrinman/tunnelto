@@ -6,7 +6,7 @@ use warp::Filter;
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| {
-        log::info!("Net svc health check triggered");
+        tracing::info!("Net svc health check triggered");
         "ok"
     });
 
@@ -15,8 +15,12 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
         .and(warp::query::<HostQuery>())
         .map(|query| warp::reply::json(&handle_query(query)));
 
+    let routes = query_svc
+        .or(health_check)
+        .with(warp::trace::trace(crate::observability::warp_trace));
+
     // spawn our websocket control server
-    tokio::spawn(warp::serve(query_svc.or(health_check)).run(addr.into()));
+    tokio::spawn(warp::serve(routes).run(addr.into()));
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +34,7 @@ pub struct HostQueryResponse {
 }
 
 fn handle_query(query: HostQuery) -> HostQueryResponse {
-    log::debug!("got query: {:?}", &query.host);
+    tracing::debug!("got query: {:?}", &query.host);
     HostQueryResponse {
         client_id: Connections::client_for_host(&query.host),
     }

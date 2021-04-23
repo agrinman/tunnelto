@@ -2,7 +2,7 @@ use crate::auth::reconnect_token::ReconnectTokenPayload;
 use crate::auth_db::AuthResult;
 use crate::{ReconnectToken, CONFIG};
 use futures::{SinkExt, StreamExt};
-use log::error;
+use tracing::error;
 use tunnelto_lib::{ClientHello, ClientHelloV1, ClientId, ClientType, ServerHello};
 use warp::filters::ws::{Message, WebSocket};
 
@@ -186,7 +186,7 @@ async fn handle_reconnect_token(
         }
     };
 
-    log::debug!(
+    tracing::debug!(
         "accepting reconnect token from client: {}",
         &payload.client_id
     );
@@ -242,7 +242,7 @@ async fn sanitize_sub_domain_and_pre_validate(
             }
         }
         Err(e) => {
-            log::debug!("Got error checking instances: {:?}", e);
+            tracing::debug!("Got error checking instances: {:?}", e);
         }
     }
 

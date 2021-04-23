@@ -11,7 +11,7 @@ pub async fn proxy_stream(instance: Instance, mut stream: TcpStream) {
     let mut instance = match TcpStream::connect(addr).await {
         Ok(stream) => stream,
         Err(e) => {
-            log::error!("Error connecting to instance: {:?}", e);
+            tracing::error!("Error connecting to instance: {:?}", e);
             let _ = stream.write_all(HTTP_ERROR_PROXYING_TUNNEL_RESPONSE).await;
             return;
         }

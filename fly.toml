@@ -10,6 +10,7 @@ kill_timeout = 5
   ALLOWED_HOSTS = "t2-svc.fly.dev,2.tunnelto.dev,t2-old.fly.dev,tunnelto.dev"
   NET_PORT = 10002
   BLOCKED_SUB_DOMAINS = "wormhole,dashboard,2"
+  RUST_LOG="tunnelto_server=debug"
 
 [experimental]
   private_network=true

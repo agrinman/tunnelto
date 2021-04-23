@@ -34,26 +34,28 @@ pub struct Instance {
 
 impl Instance {
     /// get all instances where our app runs
+    #[tracing::instrument]
     async fn get_instances() -> Result<Vec<Instance>, Error> {
         let query = if let Some(dns) = crate::CONFIG.gossip_dns_host.clone() {
             dns
         } else {
-            log::warn!("warning! gossip mode disabled!");
+            tracing::warn!("warning! gossip mode disabled!");
             return Ok(vec![]);
         };
 
-        log::debug!("querying app instances");
+        tracing::debug!("querying app instances");
 
         let resolver = TokioAsyncResolver::tokio_from_system_conf()?;
 
         let ips = resolver.lookup_ip(query).await?;
 
         let instances = ips.iter().map(|ip| Instance { ip }).collect();
-        log::debug!("Found app instances: {:?}", &instances);
+        tracing::debug!("Found app instances: {:?}", &instances);
         Ok(instances)
     }
 
     /// query the instance and see if it runs our host
+    #[tracing::instrument]
     async fn serves_host(self, host: &str) -> Result<(Instance, ClientId), Error> {
         let addr = SocketAddr::new(self.ip.clone(), crate::CONFIG.internal_network_port);
         let url = format!("http://{}", addr.to_string());
@@ -68,7 +70,7 @@ impl Instance {
         let status = response.status();
         let result: HostQueryResponse = response.json().await?;
 
-        log::debug!("Got net svc response: {}:{:?}", status, result);
+        tracing::debug!("Got net svc response: {}:{:?}", status, result);
 
         match (status, result.client_id) {
             (StatusCode::OK, Some(client_id)) => Ok((self, client_id)),
@@ -78,6 +80,7 @@ impl Instance {
 }
 
 /// get the ip address we need to connect to that runs our host
+#[tracing::instrument]
 pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error> {
     let instances = Instance::get_instances()
         .await?
@@ -89,6 +92,6 @@ pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error
     }
 
     let instance = select_ok(instances).await?.0;
-    log::debug!("Found instance: {:?} serving host: {:?}", &instance, host);
+    tracing::debug!("Found instance: {:?} serving host: {:?}", &instance, host);
     Ok(instance)
 }
