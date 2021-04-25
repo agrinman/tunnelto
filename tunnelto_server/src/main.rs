@@ -33,6 +33,7 @@ mod network;
 mod observability;
 
 use tracing::level_filters::LevelFilter;
+use tracing_honeycomb::libhoney;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry;
 
@@ -64,14 +65,18 @@ async fn main() {
         let telemetry_layer =
             tracing_honeycomb::new_honeycomb_telemetry_layer("t2-service", honeycomb_config);
 
-        // NOTE: the underlying subscriber MUST be the Registry subscriber
-        let subscriber = registry::Registry::default() // provide underlying span data store
-            .with(LevelFilter::DEBUG) // filter out low-level debug tracing (eg tokio executor)
-            .with(tracing_subscriber::fmt::Layer::default()) // log to stdout
-            .with(telemetry_layer); // publish to honeycomb backend
+        let subscriber = registry::Registry::default()
+            .with(LevelFilter::INFO)
+            .with(tracing_subscriber::fmt::Layer::default())
+            .with(telemetry_layer);
 
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
-    }
+    } else {
+        let subscriber = registry::Registry::default()
+            .with(LevelFilter::INFO)
+            .with(tracing_subscriber::fmt::Layer::default());
+        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+    };
 
     tracing::info!("starting server!");
 
