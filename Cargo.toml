@@ -9,3 +9,6 @@ members = [
 exclude = [
     "tunnelto_proxy"
 ]
+
+[profile.dev]
+split-debuginfo = "unpacked"
