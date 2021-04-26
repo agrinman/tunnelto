@@ -1,6 +1,8 @@
 pub mod console_log;
 pub use self::console_log::*;
 use super::*;
+mod ws_util;
+
 use bytes::Buf;
 use futures::{Stream, StreamExt};
 use hyper::body::HttpBody;
@@ -91,7 +93,13 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
     };
 
     let local_addr = format!("{}://{}{}", &config.scheme, &config.local_host, port);
-    let local_addr_clone = local_addr.clone();
+
+    let ws_scheme = if &config.scheme == "https" {
+        "wss"
+    } else {
+        "ws"
+    };
+    let local_ws_addr = format!("{}://{}{}", ws_scheme, &config.local_host, port);
 
     let https = hyper_tls::HttpsConnector::new();
     let http_client = hyper::Client::builder().build::<_, hyper::Body>(https);
@@ -112,20 +120,29 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .and_then(forward);
 
     let intercept_ws = warp::any()
-        .and(warp::any().map(move || local_addr_clone.clone()))
+        .and(warp::any().map(move || local_ws_addr.clone()))
+        .and(warp::header("upgrade"))
+        .and(warp::method())
+        .and(warp::header::headers_cloned())
         .and(warp::path::full())
         .and(opt_raw_query())
         .and(warp::ws())
         .map(
-            move |addr: String, path: FullPath, query: Option<String>, ws: Ws| {
+            move |addr: String,
+                  _upgrade: String,
+                  method: Method,
+                  headers: HeaderMap,
+                  path: FullPath,
+                  query: Option<String>,
+                  ws: Ws| {
                 ws.on_upgrade(move |w: WebSocket| async {
-                    forward_websocket(addr, path, query, w).await
+                    forward_websocket(addr, path, method, headers, query, w).await
                 })
             },
         );
 
     let (forward_address, intercept_server) =
-        warp::serve(intercept.or(intercept_ws)).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)));
+        warp::serve(intercept_ws.or(intercept)).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)));
     tokio::spawn(intercept_server);
 
     let css = warp::get().and(warp::path!("static" / "css" / "styles.css").map(|| {
@@ -305,6 +322,8 @@ async fn forward(
 async fn forward_websocket(
     local_addr: String,
     path: FullPath,
+    method: Method,
+    headers: HeaderMap,
     query: Option<String>,
     websocket: WebSocket,
 ) {
@@ -319,24 +338,114 @@ async fn forward_websocket(
     let url = format!("{}{}{}", local_addr, path.as_str(), query_str);
     log::debug!("forwarding to: {}", &url);
 
-    forward_websocket_inner(url, websocket).await.map_err(|e| {
-        eprint!("websocket error occurred: {:?}", e);
+    let request_id = Uuid::new_v4();
+
+    let mut request_headers = HashMap::new();
+    headers.keys().for_each(|k| {
+        let values = headers
+            .get_all(k)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .map(|s| s.to_owned())
+            .collect();
+        request_headers.insert(k.as_str().to_owned(), values);
     });
+
+    let stored_request = Request {
+        id: request_id.to_string(),
+        status: 101,
+        path: path.as_str().to_owned(),
+        query,
+        method,
+        headers: request_headers,
+        body_data: b"Websocket Data".to_vec(),
+        response_headers: Default::default(),
+        response_data: vec![],
+        started: chrono::Utc::now().naive_utc(),
+        completed: chrono::Utc::now().naive_utc(),
+        is_replay: false,
+    };
+
+    REQUESTS
+        .write()
+        .unwrap()
+        .insert(request_id.to_string(), stored_request);
+
+    let _ = forward_websocket_inner(request_id, url, websocket)
+        .await
+        .map_err(|e| {
+            error!("websocket error occurred: {:?}", e);
+        });
 }
 
 async fn forward_websocket_inner(
+    request_id: Uuid,
     url: String,
     incoming: WebSocket,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut local, _) = tokio_tungstenite::connect_async(&url).await?;
-    let mut local = local.split();
-    let mut incoming = incoming.split();
+    let (local, _) = tokio_tungstenite::connect_async(&url).await?;
+    let (mut local_sink, mut local_stream) = local.split();
+    let (mut incoming_sink, mut incoming_stream) = incoming.split();
 
-    let forward_left = tokio::io::copy(&mut local.0, &mut incoming.1);
-    let forward_right = tokio::io::copy(&mut incoming.0, &mut local.1);
-    Ok(futures::future::try_join(forward_left, forward_right)
-        .await
-        .map(|_| ())?)
+    // incoming_r -> local_w
+    tokio::spawn(async move {
+        while let Some(Ok(next)) = incoming_stream.next().await {
+            let debug_data = vec!["\n\nIncoming data => ".as_bytes(), next.as_bytes()].concat();
+
+            let message = match ws_util::warp_to_tung(next) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("invalid ws message: {:?}", e);
+                    continue;
+                }
+            };
+
+            if let Err(e) = local_sink.send(message.clone()).await {
+                error!("failed to write to local websocket: {:?}", e);
+                break;
+            }
+
+            // update our introspection
+            REQUESTS
+                .write()
+                .unwrap()
+                .get_mut(&request_id.to_string())
+                .map(|req| {
+                    req.response_data.extend_from_slice(&debug_data);
+                });
+        }
+    });
+
+    // local_r -> incoming_w
+    tokio::spawn(async move {
+        while let Some(Ok(next)) = local_stream.next().await {
+            let message = match ws_util::tung_to_warp(next) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("invalid ws message: {:?}", e);
+                    continue;
+                }
+            };
+
+            let debug_data = vec!["\n\nOutgoing data => ".as_bytes(), message.as_bytes()].concat();
+
+            if let Err(e) = incoming_sink.send(message).await {
+                error!("failed to write to incoming websocket: {:?}", e);
+                break;
+            }
+
+            // update our introspection
+            REQUESTS
+                .write()
+                .unwrap()
+                .get_mut(&request_id.to_string())
+                .map(|req| {
+                    req.response_data.extend_from_slice(&debug_data);
+                });
+        }
+    });
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, askama::Template)]
