@@ -383,11 +383,11 @@ fieldset {
 
 pre {
   -webkit-overflow-scrolling: touch;
-  background-color: #efefef94;
-  color: #4a4a4a;
+  /*background-color: uunse;*/
+  /*color: #4a4a4a;*/
   font-size: 0.875em;
   overflow-x: auto;
-  padding: 1.25rem 1.5rem;
+  /*padding: 1.25rem 1.5rem;*/
   white-space: pre;
   word-wrap: normal; }
   pre code {
