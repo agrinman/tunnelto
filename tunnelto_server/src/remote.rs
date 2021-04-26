@@ -2,6 +2,7 @@ use super::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
+use tracing::debug;
 use tracing::{error, Instrument};
 
 async fn direct_to_control(mut incoming: TcpStream) {
@@ -85,7 +86,10 @@ pub async fn accept_connection(socket: TcpStream) {
     let (active_stream, queue_rx) = ActiveStream::new(client.clone());
     let stream_id = active_stream.id.clone();
 
-    info!("new stream connected: {}", active_stream.id.to_string());
+    info!(
+        stream_id = %active_stream.id.to_string(),
+        "new stream connected"
+    );
     let (stream, sink) = tokio::io::split(socket);
 
     // add our stream
@@ -182,8 +186,6 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
 
     // Handle the health check route
     if req.path.map(|s| s.as_bytes()) == Some(HEALTH_CHECK_PATH) {
-        info!("Health Check Triggered");
-
         let _ = socket.write_all(HTTP_OK_RESPONSE).await.map_err(|e| {
             error!("failed to write health_check: {:?}", e);
         });
@@ -218,7 +220,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
     loop {
         // client is no longer connected
         if Connections::get(&tunnel_stream.client.id).is_none() {
-            info!("client disconnected, closing stream");
+            debug!("client disconnected, closing stream");
             let _ = tunnel_stream.tx.send(StreamMessage::NoClientTunnel).await;
             tunnel_stream.tx.close_channel();
             return;
@@ -228,13 +230,13 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
         let n = match tcp_stream.read(&mut buf).await {
             Ok(n) => n,
             Err(e) => {
-                eprintln!("failed to read from tcp socket: {:?}", e);
+                error!("failed to read from tcp socket: {:?}", e);
                 return;
             }
         };
 
         if n == 0 {
-            info!("stream ended");
+            debug!("stream ended");
             let _ = tunnel_stream
                 .client
                 .tx
@@ -246,13 +248,13 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
             return;
         }
 
-        info!("read {} bytes", n);
+        debug!("read {} bytes", n);
 
         let data = &buf[..n];
         let packet = ControlPacket::Data(tunnel_stream.id.clone(), data.to_vec());
 
         match tunnel_stream.client.tx.send(packet.clone()).await {
-            Ok(_) => info!("sent data packet to client: {}", &tunnel_stream.client.id),
+            Ok(_) => debug!(client_id = %tunnel_stream.client.id, "sent data packet to client"),
             Err(_) => {
                 error!("failed to forward tcp packets to disconnected client. dropping client.");
                 Connections::remove(&tunnel_stream.client);
@@ -274,12 +276,12 @@ async fn tunnel_to_stream(
             match message {
                 StreamMessage::Data(data) => Some(data),
                 StreamMessage::TunnelRefused => {
-                    info!("tunnel refused");
+                    info!(?stream_id, "tunnel refused");
                     let _ = sink.write_all(HTTP_TUNNEL_REFUSED_RESPONSE).await;
                     None
                 }
                 StreamMessage::NoClientTunnel => {
-                    info!("client tunnel not found");
+                    info!(?stream_id, "client tunnel not found");
                     let _ = sink.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                     None
                 }
@@ -291,7 +293,7 @@ async fn tunnel_to_stream(
         let data = match result {
             Some(data) => data,
             None => {
-                info!("done tunneling to sink");
+                tracing::debug!("done tunneling to sink");
                 let _ = sink.shutdown().await.map_err(|_e| {
                     error!("error shutting down tcp stream");
                 });
@@ -303,8 +305,8 @@ async fn tunnel_to_stream(
 
         let result = sink.write_all(&data).await;
 
-        if result.is_err() {
-            info!("stream closed, disconnecting");
+        if let Some(error) = result.err() {
+            tracing::warn!(?error, "stream closed, disconnecting");
             return;
         }
     }

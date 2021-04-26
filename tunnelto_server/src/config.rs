@@ -1,11 +1,3 @@
-//    pub static ref ALLOWED_HOSTS: Vec<String> = allowed_host_suffixes();
-//     pub static ref BLOCKED_SUB_DOMAINS: Vec<String> = blocked_sub_domains_suffixes();
-//     pub static ref AUTH_DB_SERVICE: AuthDbService =
-//         AuthDbService::new().expect("failed to init auth-service");
-//     pub static ref REMOTE_PORT: u16 = remote_port();
-//     pub static ref CTRL_PORT: u16 = ctrl_port();
-//     pub static ref NET_PORT: u16 = network_port();
-
 use crate::auth::SigKey;
 
 /// Global service configuration
