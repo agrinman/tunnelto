@@ -6,7 +6,7 @@ use warp::Filter;
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| {
-        tracing::info!("Net svc health check triggered");
+        tracing::debug!("Net svc health check triggered");
         "ok"
     });
 
@@ -34,7 +34,7 @@ pub struct HostQueryResponse {
 }
 
 fn handle_query(query: HostQuery) -> HostQueryResponse {
-    tracing::debug!("got query: {:?}", &query.host);
+    tracing::debug!(host=%query.host, "got query");
     HostQueryResponse {
         client_id: Connections::client_for_host(&query.host),
     }

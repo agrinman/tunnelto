@@ -70,7 +70,12 @@ impl Instance {
         let status = response.status();
         let result: HostQueryResponse = response.json().await?;
 
-        tracing::debug!("Got net svc response: {}:{:?}", status, result);
+        let found_client = result
+            .client_id
+            .as_ref()
+            .map(|c| c.to_string())
+            .unwrap_or_default();
+        tracing::debug!(status=%status, found=%found_client, "got net svc response");
 
         match (status, result.client_id) {
             (StatusCode::OK, Some(client_id)) => Ok((self, client_id)),
@@ -92,6 +97,6 @@ pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error
     }
 
     let instance = select_ok(instances).await?.0;
-    tracing::debug!("Found instance: {:?} serving host: {:?}", &instance, host);
+    tracing::debug!(instance_ip=%instance.0.ip, client_id=%instance.1.to_string(), sub_domain=%host, "found instance");
     Ok(instance)
 }
