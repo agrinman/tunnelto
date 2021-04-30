@@ -80,7 +80,7 @@ SUBCOMMANDS:
 ALLOWED_HOSTS="localhost" cargo run --bin tunnelto_server
 
 # Run a local tunnelto client talking to your local tunnelto_server
-CTRL_HOST="localhost" CTRL_PORT=5000 CTRL_TLS_OFF=1 cargo run --bin tunnelto -- start -p 8000
+CTRL_HOST="localhost" CTRL_PORT=5000 CTRL_TLS_OFF=1 cargo run --bin tunnelto -- -p 8000
 
 # Test it out!
 # Remember 8080 is our local tunnelto TCP server
