@@ -2,11 +2,12 @@ use tracing::Span;
 use tracing_honeycomb::{register_dist_tracing_root, TraceId};
 use warp::trace::Info;
 
-pub fn begin_trace(source: &str) -> Span {
+pub fn remote_trace(source: &str) -> Span {
     let trace_id = TraceId::new();
+    let id = crate::CONFIG.instance_id.clone();
 
     // Create a span using tracing macros
-    let span = tracing::info_span!("begin span", source = %source, id = %trace_id);
+    let span = tracing::info_span!("begin", id = %id, source = %source, req = %trace_id);
     span.in_scope(|| {
         let _ = register_dist_tracing_root(trace_id, None).map_err(|e| {
             eprintln!("register trace root error: {:?}", e);
@@ -15,24 +16,28 @@ pub fn begin_trace(source: &str) -> Span {
     span
 }
 
-pub fn warp_trace(info: Info) -> Span {
+pub fn network_trace(info: Info) -> Span {
     let request_id = TraceId::new();
     let method = info.method();
     let path = info.path();
+    let remote_addr = info
+        .remote_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_default();
+    let id = crate::CONFIG.instance_id.clone();
 
     // Create a span using tracing macros
     let span = tracing::info_span!(
-        "t2server",
-        id = %request_id,
-        method = %method,
-        path = %path,
+        "net-gossip",
+        id = %id,
+        req = %request_id,
     );
 
     span.in_scope(|| {
-        if let Err(err) = register_dist_tracing_root(request_id.clone(), None) {
+        if let Err(err) = register_dist_tracing_root(request_id, None) {
             eprintln!("register trace root error (warp): {:?}", err);
         }
-        tracing::info!(method = %method, path = %path);
+        tracing::info!(?id, ?method, ?path, ?remote_addr, "network request");
     });
 
     span

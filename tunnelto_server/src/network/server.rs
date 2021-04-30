@@ -13,11 +13,10 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let query_svc = warp::path::end()
         .and(warp::get())
         .and(warp::query::<HostQuery>())
-        .map(|query| warp::reply::json(&handle_query(query)));
+        .map(|query| warp::reply::json(&handle_query(query)))
+        .with(warp::trace::trace(crate::observability::network_trace));
 
-    let routes = query_svc
-        .or(health_check)
-        .with(warp::trace::trace(crate::observability::warp_trace));
+    let routes = query_svc.or(health_check);
 
     // spawn our websocket control server
     tokio::spawn(warp::serve(routes).run(addr.into()));

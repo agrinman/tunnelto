@@ -1,4 +1,5 @@
 use crate::auth::SigKey;
+use uuid::Uuid;
 
 /// Global service configuration
 pub struct Config {
@@ -28,6 +29,9 @@ pub struct Config {
 
     /// Observability API key
     pub honeycomb_api_key: Option<String>,
+
+    /// The identifier for this instance of the server
+    pub instance_id: String,
 }
 
 impl Config {
@@ -52,6 +56,7 @@ impl Config {
             .ok();
 
         let honeycomb_api_key = std::env::var("HONEYCOMB_API_KEY").ok();
+        let instance_id = std::env::var("FLY_ALLOC_ID").unwrap_or(Uuid::new_v4().to_string());
 
         Config {
             allowed_hosts,
@@ -62,6 +67,7 @@ impl Config {
             master_sig_key,
             gossip_dns_host,
             honeycomb_api_key,
+            instance_id,
         }
     }
 }

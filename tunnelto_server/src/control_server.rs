@@ -8,13 +8,13 @@ use tracing::{error, Instrument};
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| {
-        tracing::info!("Health Check #2 triggered");
+        tracing::debug!("Health Check #2 triggered");
         "ok"
     });
     let client_conn = warp::path("wormhole").and(warp::ws()).map(move |ws: Ws| {
         ws.on_upgrade(|w| {
             async move { handle_new_connection(w).await }
-                .instrument(observability::begin_trace("handle_websocket"))
+                .instrument(observability::remote_trace("handle_websocket"))
         })
     });
 
@@ -49,7 +49,7 @@ async fn handle_new_connection(websocket: WebSocket) {
         async move {
             tunnel_client(client_clone, sink, rx).await;
         }
-        .instrument(observability::begin_trace("tunnel_client")),
+        .instrument(observability::remote_trace("tunnel_client")),
     );
 
     let client_clone = client.clone();
@@ -58,7 +58,7 @@ async fn handle_new_connection(websocket: WebSocket) {
         async move {
             process_client_messages(client_clone, stream).await;
         }
-        .instrument(observability::begin_trace("process_client")),
+        .instrument(observability::remote_trace("process_client")),
     );
 
     // play ping pong
@@ -93,7 +93,7 @@ async fn handle_new_connection(websocket: WebSocket) {
                 tokio::time::sleep(Duration::new(PING_INTERVAL, 0)).await;
             }
         }
-        .instrument(observability::begin_trace("control_ping")),
+        .instrument(observability::remote_trace("control_ping")),
     );
 }
 
@@ -114,7 +114,7 @@ async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, Client
         return None;
     }
 
-    info!(
+    tracing::debug!(
         "new client connected: {:?}{}",
         &client_handshake.id,
         if client_handshake.is_anonymous {
@@ -135,10 +135,10 @@ pub async fn send_client_stream_init(mut stream: ActiveStream) {
         .await
     {
         Ok(_) => {
-            info!("sent control to client: {}", &stream.client.id);
+            tracing::debug!("sent control to client: {}", &stream.client.id);
         }
         Err(_) => {
-            info!("removing disconnected client: {}", &stream.client.id);
+            tracing::debug!("removing disconnected client: {}", &stream.client.id);
             Connections::remove(&stream.client);
         }
     }
@@ -162,7 +162,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 return;
             }
             _ => {
-                info!("goodbye client: {:?}", &client.id);
+                tracing::debug!("goodbye client: {:?}", &client.id);
                 Connections::remove(&client);
                 return;
             }
@@ -178,7 +178,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
 
         let (stream_id, message) = match packet {
             ControlPacket::Data(stream_id, data) => {
-                info!(
+                tracing::debug!(
                     "forwarding to stream[id={}]: {} bytes",
                     &stream_id.to_string(),
                     data.len()
@@ -186,7 +186,7 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
                 (stream_id, StreamMessage::Data(data))
             }
             ControlPacket::Refused(stream_id) => {
-                tracing::info!("tunnel says: refused");
+                tracing::debug!("tunnel says: refused");
                 (stream_id, StreamMessage::TunnelRefused)
             }
             ControlPacket::Init(_) | ControlPacket::End(_) => {
@@ -227,7 +227,7 @@ async fn tunnel_client(
                 }
             }
             None => {
-                info!("ending client tunnel");
+                tracing::debug!("ending client tunnel");
                 return;
             }
         };

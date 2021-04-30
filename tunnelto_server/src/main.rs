@@ -110,7 +110,7 @@ async fn main() {
             async move {
                 remote::accept_connection(socket).await;
             }
-            .instrument(observability::begin_trace("remote_connect")),
+            .instrument(observability::remote_trace("remote_connect")),
         );
     }
 }

@@ -9,8 +9,8 @@ async fn direct_to_control(mut incoming: TcpStream) {
     let mut control_socket =
         match TcpStream::connect(format!("localhost:{}", CONFIG.control_port)).await {
             Ok(s) => s,
-            Err(e) => {
-                tracing::warn!("failed to connect to local control server {:?}", e);
+            Err(error) => {
+                tracing::warn!(?error, "failed to connect to local control server");
                 return;
             }
         };
@@ -23,8 +23,8 @@ async fn direct_to_control(mut incoming: TcpStream) {
 
     match futures::future::join(join_1, join_2).await {
         (Ok(_), Ok(_)) => {}
-        (Err(e), _) | (_, Err(e)) => {
-            tracing::error!("directing stream to control failed: {:?}", e);
+        (Err(error), _) | (_, Err(error)) => {
+            tracing::error!(?error, "directing stream to control failed");
         }
     }
 }
@@ -36,6 +36,8 @@ pub async fn accept_connection(socket: TcpStream) {
         Some(s) => s,
         None => return,
     };
+
+    tracing::info!(?host, "new remote connection");
 
     // parse the host string and find our client
     if CONFIG.allowed_hosts.contains(&host) {
@@ -69,12 +71,12 @@ pub async fn accept_connection(socket: TcpStream) {
                     return;
                 }
                 Err(network::Error::DoesNotServeHost) => {
-                    error!("No tunnel found for host: {}.<>", host);
+                    error!(?host, "no tunnel found");
                     let _ = socket.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                     return;
                 }
-                Err(e) => {
-                    error!("error finding host {} for tunnel: {:?}, ", host, e);
+                Err(error) => {
+                    error!(?host, ?error, "failed to find instance");
                     let _ = socket.write_all(HTTP_ERROR_LOCATING_HOST_RESPONSE).await;
                     return;
                 }
@@ -86,7 +88,7 @@ pub async fn accept_connection(socket: TcpStream) {
     let (active_stream, queue_rx) = ActiveStream::new(client.clone());
     let stream_id = active_stream.id.clone();
 
-    info!(
+    tracing::debug!(
         stream_id = %active_stream.id.to_string(),
         "new stream connected"
     );
@@ -100,15 +102,15 @@ pub async fn accept_connection(socket: TcpStream) {
         async move {
             process_tcp_stream(active_stream, stream).await;
         }
-        .instrument(observability::begin_trace("process_tcp_stream")),
+        .instrument(observability::remote_trace("process_tcp_stream")),
     );
 
     // read from client, write to socket
     tokio::spawn(
         async move {
-            tunnel_to_stream(stream_id, sink, queue_rx).await;
+            tunnel_to_stream(host, stream_id, sink, queue_rx).await;
         }
-        .instrument(observability::begin_trace("tunnel_to_stream")),
+        .instrument(observability::remote_trace("tunnel_to_stream")),
     );
 }
 
@@ -265,6 +267,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
 
 #[tracing::instrument(skip(sink, queue))]
 async fn tunnel_to_stream(
+    subdomain: String,
     stream_id: StreamId,
     mut sink: WriteHalf<TcpStream>,
     mut queue: UnboundedReceiver<StreamMessage>,
@@ -276,12 +279,12 @@ async fn tunnel_to_stream(
             match message {
                 StreamMessage::Data(data) => Some(data),
                 StreamMessage::TunnelRefused => {
-                    info!(?stream_id, "tunnel refused");
+                    tracing::debug!(?stream_id, "tunnel refused");
                     let _ = sink.write_all(HTTP_TUNNEL_REFUSED_RESPONSE).await;
                     None
                 }
                 StreamMessage::NoClientTunnel => {
-                    info!(?stream_id, "client tunnel not found");
+                    tracing::info!(?subdomain, ?stream_id, "client tunnel not found");
                     let _ = sink.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                     None
                 }
