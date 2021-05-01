@@ -12,16 +12,18 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, RwLock};
 
+mod cli_ui;
 mod config;
 mod error;
 mod introspect;
 mod local;
-mod spinner;
+mod update;
 pub use self::error::*;
 
 pub use config::*;
 pub use tunnelto_lib::*;
 
+use crate::cli_ui::CliInterface;
 use crate::introspect::IntrospectionAddrs;
 use colored::Colorize;
 use futures::future::Either;
@@ -49,6 +51,8 @@ async fn main() {
         Ok(config) => config,
         Err(_) => return,
     };
+
+    update::check().await;
 
     let introspect_addrs = introspect::start_introspection_server(config.clone());
 
@@ -86,15 +90,10 @@ async fn run_wormhole(
     introspect: IntrospectionAddrs,
     mut restart_tx: UnboundedSender<Option<Error>>,
 ) -> Result<(), Error> {
-    let websocket = connect_to_wormhole(&config).await?;
-
-    if config.first_run {
-        eprintln!(
-            "Local Inspect Dashboard: {}{}",
-            "http://localhost:".yellow(),
-            introspect.web_explorer_address.port()
-        );
-    }
+    let interface = CliInterface::start(config.clone(), introspect.clone());
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let (websocket, sub_domain) = connect_to_wormhole(&config).await?;
+    interface.did_connect(&sub_domain);
 
     // split reading and writing
     let (mut ws_sink, mut ws_stream) = websocket.split();
@@ -159,19 +158,7 @@ async fn run_wormhole(
 
 async fn connect_to_wormhole(
     config: &Config,
-) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
-    let spinner = if config.first_run {
-        eprintln!(
-            "{}\n\n",
-            format!("{}", include_str!("../static/img/wormhole_ascii.txt")).green()
-        );
-        Some(spinner::new_spinner(
-            "initializing remote tunnel, please stand by",
-        ))
-    } else {
-        None
-    };
-
+) -> Result<(WebSocketStream<MaybeTlsStream<TcpStream>>, String), Error> {
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
@@ -230,42 +217,7 @@ async fn connect_to_wormhole(
         ServerHello::Error(error) => return Err(Error::ServerError(error)),
     };
 
-    // either first run or the tunnel changed domains
-    // Note: the latter should rarely occur.
-    if config.first_run || config.sub_domain.as_ref() != Some(&sub_domain) {
-        if let Some(pb) = spinner {
-            pb.finish_with_message(&format!(
-                "Success! Remote tunnel created on: {}",
-                &config.activation_url(&sub_domain).bold().green()
-            ));
-        }
-
-        if config.sub_domain.is_some() && (config.sub_domain.as_ref() != Some(&sub_domain)) {
-            if config.secret_key.is_some() {
-                eprintln!("{}",
-                          ">>> Notice: to use custom sub-domains feature, please upgrade your billing plan at https://dashboard.tunnelto.dev.".yellow());
-            } else {
-                eprintln!("{}",
-                          ">>> Notice: to access the sub-domain feature, get your authentication key at https://dashboard.tunnelto.dev.".yellow());
-            }
-        }
-
-        let p = match (config.scheme.as_str(), config.local_port.as_ref()) {
-            (_, Some(p)) => format!(":{}", p),
-            ("http", None) => ":8000".to_string(),
-            (_, _) => "".to_string(),
-        };
-
-        eprintln!(
-            "{} Forwarding to {}://{}{}\n",
-            "=>".green(),
-            config.scheme,
-            config.local_host,
-            p.yellow()
-        );
-    }
-
-    Ok(websocket)
+    Ok((websocket, sub_domain))
 }
 
 async fn process_control_flow_message(

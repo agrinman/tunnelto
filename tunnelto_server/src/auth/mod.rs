@@ -68,6 +68,7 @@ pub enum AuthResult {
     ReservedByYou,
     ReservedByOther,
     ReservedByYouButDelinquent,
+    PaymentRequired,
     Available,
 }
 

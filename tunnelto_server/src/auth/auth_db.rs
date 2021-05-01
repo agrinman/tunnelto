@@ -76,28 +76,32 @@ impl AuthService for AuthDbService {
         subdomain: &str,
     ) -> Result<AuthResult, Error> {
         let authenticated_account_id = self.get_account_id_for_auth_key(auth_key).await?;
-        tracing::info!(account=%authenticated_account_id.to_string(), requested_subdomain=%subdomain, "authenticated client");
+        let is_pro_account = self
+            .is_account_in_good_standing(authenticated_account_id)
+            .await?;
 
-        match self.get_account_id_for_subdomain(subdomain).await? {
-            Some(account_id) => {
-                // check you reserved it
-                if authenticated_account_id != account_id {
-                    tracing::info!(account=%authenticated_account_id.to_string(), "reserved by other");
-                    return Ok(AuthResult::ReservedByOther);
-                }
+        tracing::info!(account=%authenticated_account_id.to_string(), requested_subdomain=%subdomain, is_pro=%is_pro_account, "authenticated client");
 
-                // next ensure that the account is in good standing
-                if !self
-                    .is_account_in_good_standing(authenticated_account_id)
-                    .await?
-                {
-                    tracing::warn!(account=%authenticated_account_id.to_string(), "delinquent");
-                    return Ok(AuthResult::ReservedByYouButDelinquent);
-                }
-
-                Ok(AuthResult::ReservedByYou)
+        if let Some(account_id) = self.get_account_id_for_subdomain(subdomain).await? {
+            // check you reserved it
+            if authenticated_account_id != account_id {
+                tracing::info!(account=%authenticated_account_id.to_string(), "reserved by other");
+                return Ok(AuthResult::ReservedByOther);
             }
-            None => Ok(AuthResult::Available),
+
+            // next ensure that the account is in good standing
+            if !is_pro_account {
+                tracing::warn!(account=%authenticated_account_id.to_string(), "delinquent");
+                return Ok(AuthResult::ReservedByYouButDelinquent);
+            }
+
+            return Ok(AuthResult::ReservedByYou);
+        }
+
+        if is_pro_account {
+            Ok(AuthResult::Available)
+        } else {
+            Ok(AuthResult::PaymentRequired)
         }
     }
 }

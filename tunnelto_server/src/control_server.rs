@@ -34,7 +34,7 @@ async fn handle_new_connection(forwarded_for: String, websocket: WebSocket) {
         None => return,
     };
 
-    tracing::info!(?forwarded_for, ?handshake.sub_domain, "open tunnel");
+    tracing::info!(%forwarded_for, subdomain=%handshake.sub_domain, "open tunnel");
 
     let (tx, rx) = unbounded::<ControlPacket>();
     let mut client = ConnectedClient {

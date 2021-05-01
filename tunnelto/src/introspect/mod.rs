@@ -10,7 +10,6 @@ use hyper::client::HttpConnector;
 use hyper_tls::HttpsConnector;
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use uuid::Uuid;
 use warp::http::HeaderMap;
 use warp::http::Method;
@@ -77,29 +76,8 @@ pub enum ForwardError {
 impl warp::reject::Reject for ForwardError {}
 
 pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
-    let port = if config.scheme.as_str() == "http" {
-        let port = config
-            .local_port
-            .as_ref()
-            .map(|p| p.as_str())
-            .unwrap_or("8000");
-        format!(":{}", port)
-    } else {
-        config
-            .local_port
-            .as_ref()
-            .map(|p| format!(":{}", p))
-            .unwrap_or(String::new())
-    };
-
-    let local_addr = format!("{}://{}{}", &config.scheme, &config.local_host, port);
-
-    let ws_scheme = if &config.scheme == "https" {
-        "wss"
-    } else {
-        "ws"
-    };
-    let local_ws_addr = format!("{}://{}{}", ws_scheme, &config.local_host, port);
+    let local_addr = config.forward_url();
+    let local_ws_addr = config.ws_forward_url();
 
     let https = hyper_tls::HttpsConnector::new();
     let http_client = hyper::Client::builder().build::<_, hyper::Body>(https);
@@ -182,16 +160,9 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
         .or(css)
         .or(logo);
 
+    let dash_addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], config.dashboard_port));
     let (web_explorer_address, explorer_server) =
-        if let Some(dashboard_address) = config.dashboard_address {
-            warp::serve(web_explorer).bind_ephemeral(
-                SocketAddr::from_str(dashboard_address.as_str())
-                    .expect("Failed to bind to supplied local dashboard address"),
-            )
-        } else {
-            warp::serve(web_explorer).bind_ephemeral(SocketAddr::from(([0, 0, 0, 0], 0)))
-        };
-
+        warp::serve(web_explorer).bind_ephemeral(dash_addr);
     tokio::spawn(explorer_server);
 
     IntrospectionAddrs {
@@ -265,7 +236,7 @@ async fn forward(
         })?;
 
     let response = client.request(request).await.map_err(|e| {
-        log::error!("local server error: {:?}", e);
+        log::error!("local server error: {}", e);
         warp::reject::custom(ForwardError::LocalServerError)
     })?;
 

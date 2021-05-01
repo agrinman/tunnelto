@@ -42,7 +42,7 @@ pub async fn accept_connection(socket: TcpStream) {
         None => return,
     };
 
-    tracing::info!(?host, ?forwarded_for, "new remote connection");
+    tracing::info!(%host, %forwarded_for, "new remote connection");
 
     // parse the host string and find our client
     if CONFIG.allowed_hosts.contains(&host) {
@@ -76,12 +76,12 @@ pub async fn accept_connection(socket: TcpStream) {
                     return;
                 }
                 Err(network::Error::DoesNotServeHost) => {
-                    error!(?host, "no tunnel found");
+                    error!(%host, "no tunnel found");
                     let _ = socket.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                     return;
                 }
                 Err(error) => {
-                    error!(?host, ?error, "failed to find instance");
+                    error!(%host, ?error, "failed to find instance");
                     let _ = socket.write_all(HTTP_ERROR_LOCATING_HOST_RESPONSE).await;
                     return;
                 }
@@ -103,19 +103,21 @@ pub async fn accept_connection(socket: TcpStream) {
     ACTIVE_STREAMS.insert(stream_id.clone(), active_stream.clone());
 
     // read from socket, write to client
+    let span = observability::remote_trace("process_tcp_stream");
     tokio::spawn(
         async move {
             process_tcp_stream(active_stream, stream).await;
         }
-        .instrument(observability::remote_trace("process_tcp_stream")),
+        .instrument(span),
     );
 
     // read from client, write to socket
+    let span = observability::remote_trace("tunnel_to_stream");
     tokio::spawn(
         async move {
             tunnel_to_stream(host, stream_id, sink, queue_rx).await;
         }
-        .instrument(observability::remote_trace("tunnel_to_stream")),
+        .instrument(span),
     );
 }
 
@@ -311,7 +313,7 @@ async fn tunnel_to_stream(
                     None
                 }
                 StreamMessage::NoClientTunnel => {
-                    tracing::info!(?subdomain, ?stream_id, "client tunnel not found");
+                    tracing::info!(%subdomain, ?stream_id, "client tunnel not found");
                     let _ = sink.write_all(HTTP_NOT_FOUND_RESPONSE).await;
                     None
                 }

@@ -148,7 +148,7 @@ async fn auth_client(
         .await
     {
         Ok(AuthResult::Available) | Ok(AuthResult::ReservedByYou) => requested_sub_domain,
-        Ok(AuthResult::ReservedByYouButDelinquent) => {
+        Ok(AuthResult::ReservedByYouButDelinquent) | Ok(AuthResult::PaymentRequired) => {
             // note: delinquent payments get a random suffix
             ServerHello::prefixed_random_domain(&requested_sub_domain)
         }
@@ -157,8 +157,8 @@ async fn auth_client(
             let _ = websocket.send(Message::binary(data)).await;
             return None;
         }
-        Err(e) => {
-            error!("error auth-ing user {:?}!", e);
+        Err(error) => {
+            error!(?error, "error auth-ing user");
             let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
             let _ = websocket.send(Message::binary(data)).await;
             return None;
