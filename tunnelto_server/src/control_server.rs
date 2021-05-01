@@ -11,12 +11,15 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
         tracing::debug!("Health Check #2 triggered");
         "ok"
     });
-    let client_conn = warp::path("wormhole").and(warp::ws()).map(move |ws: Ws| {
-        ws.on_upgrade(|w| {
-            async move { handle_new_connection(w).await }
-                .instrument(observability::remote_trace("handle_websocket"))
-        })
-    });
+    let client_conn = warp::path("wormhole")
+        .and(warp::header::optional("X-Forwarded-For"))
+        .and(warp::ws())
+        .map(move |fwd: Option<String>, ws: Ws| {
+            ws.on_upgrade(|w| {
+                async move { handle_new_connection(fwd.unwrap_or_default(), w).await }
+                    .instrument(observability::remote_trace("handle_websocket"))
+            })
+        });
 
     let routes = client_conn.or(health_check);
 
@@ -24,13 +27,14 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     tokio::spawn(warp::serve(routes).run(addr.into()));
 }
 
-async fn handle_new_connection(websocket: WebSocket) {
+#[tracing::instrument(skip(websocket))]
+async fn handle_new_connection(forwarded_for: String, websocket: WebSocket) {
     let (websocket, handshake) = match try_client_handshake(websocket).await {
         Some(ws) => ws,
         None => return,
     };
 
-    tracing::info!(?handshake.sub_domain, "open tunnel");
+    tracing::info!(?forwarded_for, ?handshake.sub_domain, "open tunnel");
 
     let (tx, rx) = unbounded::<ControlPacket>();
     let mut client = ConnectedClient {
@@ -97,6 +101,7 @@ async fn handle_new_connection(websocket: WebSocket) {
     );
 }
 
+#[tracing::instrument(skip(websocket))]
 async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, ClientHandshake)> {
     // Authenticate client handshake
     let (mut websocket, client_handshake) = client_auth::auth_client_handshake(websocket).await?;
@@ -109,8 +114,8 @@ async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, Client
     .unwrap_or_default();
 
     let send_result = websocket.send(Message::binary(data)).await;
-    if let Err(e) = send_result {
-        error!("aborting...failed to write server hello: {:?}", e);
+    if let Err(error) = send_result {
+        error!(?error, "aborting...failed to write server hello");
         return None;
     }
 
@@ -157,12 +162,12 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
             }
             // handle close with reason
             Some(Ok(msg)) if msg.is_close() && !msg.as_bytes().is_empty() => {
-                tracing::debug!("got close, reason = {:?}", msg.to_str());
+                tracing::debug!(close_reason=?msg, "got close");
                 Connections::remove(&client);
                 return;
             }
             _ => {
-                tracing::debug!("goodbye client: {:?}", &client.id);
+                tracing::debug!(?client.id, "goodbye client");
                 Connections::remove(&client);
                 return;
             }
@@ -170,19 +175,15 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
 
         let packet = match ControlPacket::deserialize(&message) {
             Ok(packet) => packet,
-            Err(e) => {
-                error!("invalid data packet: {:?}", e);
+            Err(error) => {
+                error!(?error, "invalid data packet");
                 continue;
             }
         };
 
         let (stream_id, message) = match packet {
             ControlPacket::Data(stream_id, data) => {
-                tracing::debug!(
-                    "forwarding to stream[id={}]: {} bytes",
-                    &stream_id.to_string(),
-                    data.len()
-                );
+                tracing::debug!(?stream_id, num_bytes=?data.len(),"forwarding to stream");
                 (stream_id, StreamMessage::Data(data))
             }
             ControlPacket::Refused(stream_id) => {
@@ -203,8 +204,8 @@ async fn process_client_messages(client: ConnectedClient, mut client_conn: Split
         let stream = ACTIVE_STREAMS.get(&stream_id).map(|s| s.value().clone());
 
         if let Some(mut stream) = stream {
-            let _ = stream.tx.send(message).await.map_err(|e| {
-                tracing::error!("Failed to send to stream tx: {:?}", e);
+            let _ = stream.tx.send(message).await.map_err(|error| {
+                tracing::trace!(?error, "Failed to send to stream tx");
             });
         }
     }
@@ -220,8 +221,8 @@ async fn tunnel_client(
         match queue.next().await {
             Some(packet) => {
                 let result = sink.send(Message::binary(packet.serialize())).await;
-                if result.is_err() {
-                    error!("client disconnected: aborting.");
+                if let Err(error) = result {
+                    tracing::trace!(?error, "client disconnected: aborting.");
                     Connections::remove(&client);
                     return;
                 }

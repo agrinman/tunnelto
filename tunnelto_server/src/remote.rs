@@ -29,15 +29,20 @@ async fn direct_to_control(mut incoming: TcpStream) {
     }
 }
 
+#[tracing::instrument(skip(socket))]
 pub async fn accept_connection(socket: TcpStream) {
     // peek the host of the http request
     // if health check, then handle it and return
-    let (mut socket, host) = match peek_http_request_host(socket).await {
+    let StreamWithPeekedHost {
+        mut socket,
+        host,
+        forwarded_for,
+    } = match peek_http_request_host(socket).await {
         Some(s) => s,
         None => return,
     };
 
-    tracing::info!(?host, "new remote connection");
+    tracing::info!(?host, ?forwarded_for, "new remote connection");
 
     // parse the host string and find our client
     if CONFIG.allowed_hosts.contains(&host) {
@@ -152,9 +157,14 @@ const HTTP_TUNNEL_REFUSED_RESPONSE: &'static [u8] =
 const HTTP_OK_RESPONSE: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
 const HEALTH_CHECK_PATH: &'static [u8] = b"/0xDEADBEEF_HEALTH_CHECK";
 
+struct StreamWithPeekedHost {
+    socket: TcpStream,
+    host: String,
+    forwarded_for: String,
+}
 /// Filter incoming remote streams
 #[tracing::instrument(skip(socket))]
-async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, String)> {
+async fn peek_http_request_host(mut socket: TcpStream) -> Option<StreamWithPeekedHost> {
     /// Note we return out if the host header is not found
     /// within the first 4kb of the request.
     const MAX_HEADER_PEAK: usize = 4096;
@@ -195,6 +205,19 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
         return None;
     }
 
+    // get the ip addr in the header
+    let forwarded_for = if let Some(Ok(forwarded_for)) = req
+        .headers
+        .iter()
+        .filter(|h| h.name.to_lowercase() == "x-forwarded-for".to_string())
+        .map(|h| std::str::from_utf8(h.value))
+        .next()
+    {
+        forwarded_for.to_string()
+    } else {
+        String::default()
+    };
+
     // look for a host header
     if let Some(Ok(host)) = req
         .headers
@@ -203,10 +226,14 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<(TcpStream, Str
         .map(|h| std::str::from_utf8(h.value))
         .next()
     {
-        return Some((socket, host.to_string()));
+        return Some(StreamWithPeekedHost {
+            socket,
+            host: host.to_string(),
+            forwarded_for,
+        });
     }
 
-    tracing::debug!("Found no host header, dropping connection.");
+    tracing::info!("found no host header, dropping connection.");
     None
 }
 
@@ -265,7 +292,7 @@ async fn process_tcp_stream(mut tunnel_stream: ActiveStream, mut tcp_stream: Rea
     }
 }
 
-#[tracing::instrument(skip(sink, queue))]
+#[tracing::instrument(skip(sink, stream_id, queue))]
 async fn tunnel_to_stream(
     subdomain: String,
     stream_id: StreamId,

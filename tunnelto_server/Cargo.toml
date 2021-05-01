@@ -34,6 +34,7 @@ trust-dns-resolver = "0.20"
 hmac-sha256 = "0.1.7"
 hex = "0.4.3"
 rand = "0.7.3"
+async-trait = "0.1.50"
 
 tracing = "0.1.25"
 tracing-subscriber = "0.2.17"

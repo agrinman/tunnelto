@@ -1,6 +1,9 @@
 use rusoto_core::{Client, HttpClient, Region};
 use rusoto_dynamodb::{AttributeValue, DynamoDb, DynamoDbClient, GetItemError, GetItemInput};
 
+use super::AuthResult;
+use crate::auth::AuthService;
+use async_trait::async_trait;
 use rusoto_credential::EnvironmentProvider;
 use sha2::Digest;
 use std::collections::HashMap;
@@ -62,23 +65,24 @@ pub enum Error {
     SubdomainNotAuthorized,
 }
 
-pub enum AuthResult {
-    ReservedByYou,
-    ReservedByOther,
-    ReservedByYouButDelinquent,
-    Available,
-}
-impl AuthDbService {
-    pub async fn auth_sub_domain(
+#[async_trait]
+impl AuthService for AuthDbService {
+    type Error = Error;
+    type AuthKey = String;
+
+    async fn auth_sub_domain(
         &self,
-        auth_key: &str,
+        auth_key: &String,
         subdomain: &str,
     ) -> Result<AuthResult, Error> {
         let authenticated_account_id = self.get_account_id_for_auth_key(auth_key).await?;
+        tracing::info!(account=%authenticated_account_id.to_string(), requested_subdomain=%subdomain, "authenticated client");
+
         match self.get_account_id_for_subdomain(subdomain).await? {
             Some(account_id) => {
                 // check you reserved it
                 if authenticated_account_id != account_id {
+                    tracing::info!(account=%authenticated_account_id.to_string(), "reserved by other");
                     return Ok(AuthResult::ReservedByOther);
                 }
 
@@ -87,6 +91,7 @@ impl AuthDbService {
                     .is_account_in_good_standing(authenticated_account_id)
                     .await?
                 {
+                    tracing::warn!(account=%authenticated_account_id.to_string(), "delinquent");
                     return Ok(AuthResult::ReservedByYouButDelinquent);
                 }
 
@@ -95,7 +100,9 @@ impl AuthDbService {
             None => Ok(AuthResult::Available),
         }
     }
+}
 
+impl AuthDbService {
     async fn get_account_id_for_auth_key(&self, auth_key: &str) -> Result<Uuid, Error> {
         let auth_key_hash = key_id(auth_key);
 

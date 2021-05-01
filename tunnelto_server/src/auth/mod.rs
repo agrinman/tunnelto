@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -45,5 +46,45 @@ impl SigKey {
         };
         let expected = hmac_sha256::HMAC::mac(data, &self.0).to_vec();
         signature == expected
+    }
+}
+
+/// Define the required behavior of an Authentication Service
+#[async_trait]
+pub trait AuthService {
+    type Error;
+    type AuthKey;
+
+    /// Authenticate a subdomain with an AuthKey
+    async fn auth_sub_domain(
+        &self,
+        auth_key: &Self::AuthKey,
+        subdomain: &str,
+    ) -> Result<AuthResult, Self::Error>;
+}
+
+/// A result for authenticating a subdomain
+pub enum AuthResult {
+    ReservedByYou,
+    ReservedByOther,
+    ReservedByYouButDelinquent,
+    Available,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct NoAuth;
+
+#[async_trait]
+impl AuthService for NoAuth {
+    type Error = ();
+    type AuthKey = ();
+
+    /// Authenticate a subdomain with an AuthKey
+    async fn auth_sub_domain(
+        &self,
+        _auth_key: &Self::AuthKey,
+        _subdomain: &str,
+    ) -> Result<AuthResult, Self::Error> {
+        Ok(AuthResult::Available)
     }
 }

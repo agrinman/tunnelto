@@ -45,6 +45,9 @@ lazy_static! {
     pub static ref AUTH_DB_SERVICE: AuthDbService =
         AuthDbService::new().expect("failed to init auth-service");
     pub static ref CONFIG: Config = Config::from_env();
+
+    // To disable all authentication:
+    // pub static ref AUTH_DB_SERVICE: crate::auth::NoAuth = crate::auth::NoAuth;
 }
 
 #[tokio::main]

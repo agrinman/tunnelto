@@ -1,5 +1,5 @@
 use crate::auth::reconnect_token::ReconnectTokenPayload;
-use crate::auth_db::AuthResult;
+use crate::auth::{AuthResult, AuthService};
 use crate::{ReconnectToken, CONFIG};
 use futures::{SinkExt, StreamExt};
 use tracing::error;
@@ -12,6 +12,7 @@ pub struct ClientHandshake {
     pub is_anonymous: bool,
 }
 
+#[tracing::instrument(skip(websocket))]
 pub async fn auth_client_handshake(
     mut websocket: WebSocket,
 ) -> Option<(WebSocket, ClientHandshake)> {
@@ -32,6 +33,7 @@ pub async fn auth_client_handshake(
     }
 }
 
+#[tracing::instrument(skip(websocket))]
 async fn auth_client_v1(
     client_hello: ClientHelloV1,
     mut websocket: WebSocket,
@@ -65,6 +67,7 @@ async fn auth_client_v1(
     ))
 }
 
+#[tracing::instrument(skip(client_hello_data, websocket))]
 async fn auth_client(
     client_hello_data: &[u8],
     mut websocket: WebSocket,
@@ -72,8 +75,8 @@ async fn auth_client(
     // parse the client hello
     let client_hello: ClientHello = match serde_json::from_slice(client_hello_data) {
         Ok(ch) => ch,
-        Err(e) => {
-            error!("invalid client hello: {}", e);
+        Err(error) => {
+            error!(?error, "invalid client hello");
             let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
             let _ = websocket.send(Message::binary(data)).await;
             return None;
@@ -172,14 +175,15 @@ async fn auth_client(
     ))
 }
 
+#[tracing::instrument(skip(token, websocket))]
 async fn handle_reconnect_token(
     token: ReconnectToken,
     mut websocket: WebSocket,
 ) -> Option<(WebSocket, ClientHandshake)> {
     let payload = match ReconnectTokenPayload::verify(token, &CONFIG.master_sig_key) {
         Ok(payload) => payload,
-        Err(e) => {
-            error!("invalid reconnect token: {:?}", e);
+        Err(error) => {
+            error!(?error, "invalid reconnect token");
             let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
             let _ = websocket.send(Message::binary(data)).await;
             return None;
@@ -187,8 +191,8 @@ async fn handle_reconnect_token(
     };
 
     tracing::debug!(
-        "accepting reconnect token from client: {}",
-        &payload.client_id
+        client_id=%&payload.client_id,
+        "accepting reconnect token from client",
     );
 
     Some((
