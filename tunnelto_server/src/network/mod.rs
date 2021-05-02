@@ -34,7 +34,6 @@ pub struct Instance {
 
 impl Instance {
     /// get all instances where our app runs
-    #[tracing::instrument]
     async fn get_instances() -> Result<Vec<Instance>, Error> {
         let query = if let Some(dns) = crate::CONFIG.gossip_dns_host.clone() {
             dns
@@ -55,7 +54,6 @@ impl Instance {
     }
 
     /// query the instance and see if it runs our host
-    #[tracing::instrument]
     async fn serves_host(self, host: &str) -> Result<(Instance, ClientId), Error> {
         let addr = SocketAddr::new(self.ip.clone(), crate::CONFIG.internal_network_port);
         let url = format!("http://{}", addr.to_string());
@@ -97,6 +95,6 @@ pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error
     }
 
     let instance = select_ok(instances).await?.0;
-    tracing::debug!(instance_ip=%instance.0.ip, client_id=%instance.1.to_string(), sub_domain=%host, "found instance");
+    tracing::info!(instance_ip=%instance.0.ip, client_id=%instance.1.to_string(), sub_domain=%host, "found instance for host");
     Ok(instance)
 }

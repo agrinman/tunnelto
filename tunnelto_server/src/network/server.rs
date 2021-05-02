@@ -13,8 +13,7 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let query_svc = warp::path::end()
         .and(warp::get())
         .and(warp::query::<HostQuery>())
-        .map(|query| warp::reply::json(&handle_query(query)))
-        .with(warp::trace::trace(crate::observability::network_trace));
+        .map(|query| warp::reply::json(&handle_query(query)));
 
     let routes = query_svc.or(health_check);
 

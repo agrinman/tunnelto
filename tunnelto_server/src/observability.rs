@@ -1,6 +1,6 @@
 use tracing::Span;
 use tracing_honeycomb::{register_dist_tracing_root, TraceId};
-use warp::trace::Info;
+// use warp::trace::Info;
 
 pub fn remote_trace(source: &str) -> Span {
     let current = tracing::Span::current();
@@ -17,30 +17,32 @@ pub fn remote_trace(source: &str) -> Span {
     });
     span
 }
-
-pub fn network_trace(info: Info) -> Span {
-    let request_id = TraceId::new();
-    let method = info.method();
-    let path = info.path();
-    let remote_addr = info
-        .remote_addr()
-        .map(|a| a.to_string())
-        .unwrap_or_default();
-    let id = crate::CONFIG.instance_id.clone();
-
-    // Create a span using tracing macros
-    let span = tracing::info_span!(
-        "net-gossip",
-        id = %id,
-        req = %request_id,
-    );
-
-    span.in_scope(|| {
-        if let Err(err) = register_dist_tracing_root(request_id, None) {
-            eprintln!("register trace root error (warp): {:?}", err);
-        }
-        tracing::info!(id=%id, ?method, ?path, ?remote_addr, "network request");
-    });
-
-    span
-}
+//
+// pub fn network_trace(info: Info) -> Span {
+//     let request_id = TraceId::new();
+//     let method = info.method();
+//     let path = info.path();
+//     let remote_addr = info
+//         .remote_addr()
+//         .map(|a| a.to_string())
+//         .unwrap_or_default();
+//     let id = crate::CONFIG.instance_id.clone();
+//
+//     // Create a span using tracing macros
+//     let span = tracing::info_span!(
+//         "net-gossip",
+//         id = %id,
+//         req = %request_id,
+//         ?method,
+//         ?path,
+//         ?remote_addr
+//     );
+//
+//     span.in_scope(|| {
+//         if let Err(err) = register_dist_tracing_root(request_id, None) {
+//             eprintln!("register trace root error (warp): {:?}", err);
+//         }
+//     });
+//
+//     span
+// }
