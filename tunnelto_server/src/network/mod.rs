@@ -95,6 +95,6 @@ pub async fn instance_for_host(host: &str) -> Result<(Instance, ClientId), Error
     }
 
     let instance = select_ok(instances).await?.0;
-    tracing::info!(instance_ip=%instance.0.ip, client_id=%instance.1.to_string(), sub_domain=%host, "found instance for host");
+    tracing::info!(instance_ip=%instance.0.ip, client_id=%instance.1.to_string(), subdomain=%host, "found instance for host");
     Ok(instance)
 }
