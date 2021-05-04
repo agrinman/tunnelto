@@ -19,7 +19,7 @@ jobs:
           override: true
           
       - name: "tunnelto only"
-        with: |
+        run: |
           cd tunnelto
           
       - name: publish crate
