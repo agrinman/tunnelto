@@ -18,12 +18,7 @@ jobs:
           toolchain: stable
           override: true
           
-      - name: "tunnelto only"
-        run: |
+      - run: |
           cd tunnelto
-          
-      - name: publish crate
-        uses: katyo/publish-crates@v1
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          dry-run: true
+          cargo publish --dry-run --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
+
