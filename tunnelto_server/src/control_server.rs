@@ -2,24 +2,25 @@ pub use super::*;
 use crate::auth::reconnect_token::ReconnectTokenPayload;
 use crate::client_auth::ClientHandshake;
 use chrono::Utc;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
 use std::time::Duration;
 use tracing::{error, Instrument};
+use warp::Rejection;
 
 pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     let health_check = warp::get().and(warp::path("health_check")).map(|| {
         tracing::debug!("Health Check #2 triggered");
         "ok"
     });
-    let client_conn = warp::path("wormhole")
-        .and(warp::header::optional("X-Forwarded-For"))
-        .and(warp::ws())
-        .map(move |fwd: Option<String>, ws: Ws| {
-            ws.on_upgrade(|w| {
-                async move { handle_new_connection(fwd.unwrap_or_default(), w).await }
+    let client_conn = warp::path("wormhole").and(client_ip()).and(warp::ws()).map(
+        move |client_ip: IpAddr, ws: Ws| {
+            ws.on_upgrade(move |w| {
+                async move { handle_new_connection(client_ip, w).await }
                     .instrument(observability::remote_trace("handle_websocket"))
             })
-        });
+        },
+    );
 
     let routes = client_conn.or(health_check);
 
@@ -27,14 +28,48 @@ pub fn spawn<A: Into<SocketAddr>>(addr: A) {
     tokio::spawn(warp::serve(routes).run(addr.into()));
 }
 
+fn client_ip() -> impl Filter<Extract = (IpAddr,), Error = Rejection> + Copy {
+    warp::any()
+        .and(warp::header::optional("Fly-Client-IP"))
+        .and(warp::header::optional("X-Forwarded-For"))
+        .and(warp::addr::remote())
+        .map(
+            |client_ip: Option<String>, fwd: Option<String>, remote: Option<SocketAddr>| {
+                let client_ip = client_ip.map(|s| IpAddr::from_str(&s).ok()).flatten();
+                let fwd = fwd
+                    .map(|s| {
+                        s.split(",")
+                            .into_iter()
+                            .next()
+                            .map(IpAddr::from_str)
+                            .map(Result::ok)
+                            .flatten()
+                    })
+                    .flatten();
+                let remote = remote.map(|r| r.ip());
+                client_ip
+                    .or(fwd)
+                    .or(remote)
+                    .unwrap_or(IpAddr::from([0, 0, 0, 0]))
+            },
+        )
+}
+
 #[tracing::instrument(skip(websocket))]
-async fn handle_new_connection(forwarded_for: String, websocket: WebSocket) {
+async fn handle_new_connection(client_ip: IpAddr, websocket: WebSocket) {
+    // check if this client is blocked
+    if CONFIG.blocked_ips.contains(&client_ip) {
+        tracing::warn!(?client_ip, "client ip is on block list, denying connection");
+        let _ = websocket.close().await;
+        return;
+    }
+
     let (websocket, handshake) = match try_client_handshake(websocket).await {
         Some(ws) => ws,
         None => return,
     };
 
-    tracing::info!(%forwarded_for, subdomain=%handshake.sub_domain, "open tunnel");
+    tracing::info!(client_ip=%client_ip, subdomain=%handshake.sub_domain, "open tunnel");
 
     let (tx, rx) = unbounded::<ControlPacket>();
     let mut client = ConnectedClient {

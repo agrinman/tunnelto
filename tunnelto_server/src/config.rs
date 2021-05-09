@@ -1,4 +1,6 @@
 use crate::auth::SigKey;
+use std::net::IpAddr;
+use std::str::FromStr;
 use uuid::Uuid;
 
 /// Global service configuration
@@ -32,6 +34,9 @@ pub struct Config {
 
     /// The identifier for this instance of the server
     pub instance_id: String,
+
+    /// Blocked IP addresses
+    pub blocked_ips: Vec<IpAddr>,
 }
 
 impl Config {
@@ -57,6 +62,14 @@ impl Config {
 
         let honeycomb_api_key = std::env::var("HONEYCOMB_API_KEY").ok();
         let instance_id = std::env::var("FLY_ALLOC_ID").unwrap_or(Uuid::new_v4().to_string());
+        let blocked_ips = std::env::var("BLOCKED_IPS")
+            .map(|s| {
+                s.split(",")
+                    .map(IpAddr::from_str)
+                    .filter_map(Result::ok)
+                    .collect()
+            })
+            .unwrap_or(vec![]);
 
         Config {
             allowed_hosts,
@@ -68,6 +81,7 @@ impl Config {
             gossip_dns_host,
             honeycomb_api_key,
             instance_id,
+            blocked_ips,
         }
     }
 }
