@@ -62,7 +62,13 @@ async fn main() {
                 dataset: "t2-service".to_string(),
                 ..libhoney::client::Options::default()
             },
-            transmission_options: libhoney::transmission::Options::default(),
+            transmission_options: libhoney::transmission::Options {
+                max_batch_size: 50,
+                max_concurrent_batches: 10,
+                batch_timeout: std::time::Duration::from_millis(1000),
+                pending_work_capacity: 5_000,
+                user_agent_addition: None,
+            },
         };
 
         let telemetry_layer =
