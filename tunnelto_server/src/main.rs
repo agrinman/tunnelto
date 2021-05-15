@@ -18,10 +18,16 @@ mod active_stream;
 use self::active_stream::*;
 
 mod auth;
-pub use self::auth::auth_db;
+#[cfg(feature = "dynamodb")]
+pub use self::auth::dynamo_auth_db;
+#[cfg(feature = "sqlite")]
+pub use self::auth::sqlite_auth_db;
 pub use self::auth::client_auth;
 
-pub use self::auth_db::AuthDbService;
+#[cfg(feature = "dynamodb")]
+pub use self::dynamo_auth_db::AuthDbService;
+#[cfg(feature = "sqlite")]
+pub use self::sqlite_auth_db::AuthDbService;
 
 mod control_server;
 mod remote;

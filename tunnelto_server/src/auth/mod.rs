@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt::Formatter;
 
-pub mod auth_db;
+#[cfg(feature = "dynamodb")]
+pub mod dynamo_auth_db;
+#[cfg(feature = "sqlite")]
+pub mod sqlite_auth_db;
 pub mod client_auth;
 pub mod reconnect_token;
 

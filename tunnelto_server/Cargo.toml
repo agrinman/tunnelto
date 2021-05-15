@@ -44,3 +44,12 @@ tracing-honeycomb = { git = "https://github.com/agrinman/tracing-honeycomb", rev
 rusoto_core = "0.46"
 rusoto_dynamodb = "0.46"
 rusoto_credential = "0.46"
+
+[dependencies.rusqlite]
+version = "0.21.0"
+features = ["bundled"]
+
+[features]
+default = ["dynamodb"]
+dynamodb = []
+sqlite = []
