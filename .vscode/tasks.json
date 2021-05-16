@@ -24,6 +24,17 @@
 				"isDefault": true
 			},
 			"label": "cargo check"
+		},
+		{
+			"type": "cargo",
+			"command": "run",
+			"args": [
+				"--bin tunnelto"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"label": "Run client"
 		}
 	]
 }

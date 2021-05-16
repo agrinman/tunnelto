@@ -32,6 +32,7 @@ pub struct ReconnectToken(pub String);
 pub enum ServerHello {
     Success {
         sub_domain: String,
+        hostname: String,
         client_id: ClientId,
     },
     SubDomainInUse,
@@ -64,15 +65,6 @@ pub struct ClientHello {
     pub sub_domain: Option<String>,
     pub client_type: ClientType,
     pub reconnect_token: Option<ReconnectToken>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ClientHelloV1 {
-    pub id: ClientId,
-    pub sub_domain: Option<String>,
-    pub is_anonymous: bool,
-    unix_seconds: i64,
-    signature: String,
 }
 
 impl ClientHello {

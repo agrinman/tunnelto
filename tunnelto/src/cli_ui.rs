@@ -36,7 +36,7 @@ impl CliInterface {
         }
     }
 
-    pub fn did_connect(&self, sub_domain: &str) {
+    pub fn did_connect(&self, sub_domain: &str, full_hostname: &str) {
         self.spinner
             .finish_with_message("Success! Remote tunnel is now open.\n".green().as_ref());
 
@@ -44,7 +44,7 @@ impl CliInterface {
             return;
         }
 
-        let public_url = self.config.activation_url(&sub_domain).bold().green();
+        let public_url = self.config.activation_url(&full_hostname).bold().green();
         let forward_url = self.config.forward_url();
         let inspect = format!(
             "http://localhost:{}",

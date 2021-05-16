@@ -144,6 +144,7 @@ async fn try_client_handshake(websocket: WebSocket) -> Option<(WebSocket, Client
     // Send server hello success
     let data = serde_json::to_vec(&ServerHello::Success {
         sub_domain: client_handshake.sub_domain.clone(),
+        hostname: format!("{}.{}", &client_handshake.sub_domain, CONFIG.tunnel_host),
         client_id: client_handshake.id.clone(),
     })
     .unwrap_or_default();

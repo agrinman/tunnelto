@@ -37,6 +37,9 @@ pub struct Config {
 
     /// Blocked IP addresses
     pub blocked_ips: Vec<IpAddr>,
+
+    /// The host on which we create tunnels on
+    pub tunnel_host: String,
 }
 
 impl Config {
@@ -71,6 +74,8 @@ impl Config {
             })
             .unwrap_or(vec![]);
 
+        let tunnel_host = std::env::var("TUNNEL_HOST").unwrap_or("tunnelto.dev".to_string());
+
         Config {
             allowed_hosts,
             blocked_sub_domains,
@@ -82,6 +87,7 @@ impl Config {
             honeycomb_api_key,
             instance_id,
             blocked_ips,
+            tunnel_host,
         }
     }
 }
