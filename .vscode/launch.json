@@ -81,7 +81,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'tunnelto_server'",
+            "name": "server",
             "cargo": {
                 "args": [
                     "test",
@@ -95,7 +95,7 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
         }
     ]
 }

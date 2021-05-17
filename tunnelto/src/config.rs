@@ -16,7 +16,7 @@ const SECRET_KEY_FILE: &'static str = "key.token";
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "tunnelto",
-    author = "Alex Grinman <alex@tunnelto.dev>",
+    author = "support@tunnelto.dev",
     about = "Expose your local web server to the internet with a public url."
 )]
 struct Opts {

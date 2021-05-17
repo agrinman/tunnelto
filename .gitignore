@@ -1,6 +1,6 @@
 /target
 tunnelto_server
 !tunnelto_server/
-.env
+*.env
 tunnelto_proxy/
 .idea/

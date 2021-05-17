@@ -18,5 +18,6 @@ jobs:
           toolchain: stable
           override: true
           
+      - run: cd tunnelto_lib && cargo publish --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
       - run: cd tunnelto && cargo publish --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
 
