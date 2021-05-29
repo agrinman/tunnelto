@@ -163,16 +163,12 @@ impl Config {
         })
     }
 
-    pub fn activation_url(&self, server_chosen_sub_domain: &str) -> String {
+    pub fn activation_url(&self, full_hostname: &str) -> String {
         format!(
             "{}://{}",
             if self.tls_off { "http" } else { "https" },
-            self.activation_host(server_chosen_sub_domain)
+            full_hostname
         )
-    }
-
-    pub fn activation_host(&self, server_chosen_sub_domain: &str) -> String {
-        format!("{}.{}", &server_chosen_sub_domain, &self.host)
     }
 
     pub fn forward_url(&self) -> String {

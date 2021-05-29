@@ -1,7 +1,7 @@
 [package]
 name = "tunnelto"
 description = "expose your local web server to the internet with a public url"
-version = "0.1.17"
+version = "0.1.18"
 authors = ["Alex Grinman <alex@tunnelto.dev>"]
 edition = "2018"
 license = "MIT"
@@ -13,7 +13,7 @@ name = "tunnelto"
 path = "src/main.rs"
 
 [dependencies]
-tunnelto_lib = { version = "0.1.16", path = "../tunnelto_lib" }
+tunnelto_lib = { version = "0.1.17", path = "../tunnelto_lib" }
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
@@ -41,3 +41,4 @@ http-body = "0.3.1"
 serde_urlencoded = "0.6.1"
 reqwest = { version = "0.11", features = ["json"] }
 cli-table = "0.4"
+semver = "0.11"

@@ -3,7 +3,7 @@ use crate::auth::{AuthResult, AuthService};
 use crate::{ReconnectToken, CONFIG};
 use futures::{SinkExt, StreamExt};
 use tracing::error;
-use tunnelto_lib::{ClientHello, ClientHelloV1, ClientId, ClientType, ServerHello};
+use tunnelto_lib::{ClientHello, ClientId, ClientType, ServerHello};
 use warp::filters::ws::{Message, WebSocket};
 
 pub struct ClientHandshake {
@@ -24,47 +24,7 @@ pub async fn auth_client_handshake(
         }
     };
 
-    if let Ok(client_hello_v1) =
-        serde_json::from_slice::<ClientHelloV1>(client_hello_data.as_bytes())
-    {
-        auth_client_v1(client_hello_v1, websocket).await
-    } else {
-        auth_client(client_hello_data.as_bytes(), websocket).await
-    }
-}
-
-#[tracing::instrument(skip(websocket))]
-async fn auth_client_v1(
-    client_hello: ClientHelloV1,
-    mut websocket: WebSocket,
-) -> Option<(WebSocket, ClientHandshake)> {
-    let client_id = client_hello.id.safe_id();
-    let sub_domain = match client_hello.sub_domain {
-        None => ServerHello::random_domain(),
-
-        // otherwise, try to assign the sub domain
-        Some(sub_domain) => {
-            let (ws, sub_domain) =
-                match sanitize_sub_domain_and_pre_validate(websocket, sub_domain, &client_id).await
-                {
-                    Some(s) => s,
-                    None => return None,
-                };
-            websocket = ws;
-
-            // don't allow specified domains for anonymous v1 clients
-            ServerHello::prefixed_random_domain(&sub_domain)
-        }
-    };
-
-    Some((
-        websocket,
-        ClientHandshake {
-            id: client_id,
-            sub_domain,
-            is_anonymous: true,
-        },
-    ))
+    auth_client(client_hello_data.as_bytes(), websocket).await
 }
 
 #[tracing::instrument(skip(client_hello_data, websocket))]
@@ -85,27 +45,31 @@ async fn auth_client(
 
     let (auth_key, client_id, requested_sub_domain) = match client_hello.client_type {
         ClientType::Anonymous => {
-            // determine the client and subdomain
-            let (client_id, sub_domain) =
-                match (client_hello.reconnect_token, client_hello.sub_domain) {
-                    (Some(token), _) => {
-                        return handle_reconnect_token(token, websocket).await;
-                    }
-                    (None, Some(sd)) => (
-                        ClientId::generate(),
-                        ServerHello::prefixed_random_domain(&sd),
-                    ),
-                    (None, None) => (ClientId::generate(), ServerHello::random_domain()),
-                };
+            let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
+            let _ = websocket.send(Message::binary(data)).await;
+            return None;
 
-            return Some((
-                websocket,
-                ClientHandshake {
-                    id: client_id,
-                    sub_domain,
-                    is_anonymous: true,
-                },
-            ));
+            // // determine the client and subdomain
+            // let (client_id, sub_domain) =
+            //     match (client_hello.reconnect_token, client_hello.sub_domain) {
+            //         (Some(token), _) => {
+            //             return handle_reconnect_token(token, websocket).await;
+            //         }
+            //         (None, Some(sd)) => (
+            //             ClientId::generate(),
+            //             ServerHello::prefixed_random_domain(&sd),
+            //         ),
+            //         (None, None) => (ClientId::generate(), ServerHello::random_domain()),
+            //     };
+
+            // return Some((
+            //     websocket,
+            //     ClientHandshake {
+            //         id: client_id,
+            //         sub_domain,
+            //         is_anonymous: true,
+            //     },
+            // ));
         }
         ClientType::Auth { key } => match client_hello.sub_domain {
             Some(requested_sub_domain) => {
@@ -125,18 +89,12 @@ async fn auth_client(
                 (key, client_id, sub_domain)
             }
             None => {
-                return if let Some(token) = client_hello.reconnect_token {
-                    handle_reconnect_token(token, websocket).await
+                if let Some(token) = client_hello.reconnect_token {
+                    return handle_reconnect_token(token, websocket).await;
                 } else {
                     let sub_domain = ServerHello::random_domain();
-                    Some((
-                        websocket,
-                        ClientHandshake {
-                            id: ClientId::generate(),
-                            sub_domain,
-                            is_anonymous: true,
-                        },
-                    ))
+                    let client_id = key.client_id();
+                    (key, client_id, sub_domain)
                 }
             }
         },
@@ -150,7 +108,12 @@ async fn auth_client(
         Ok(AuthResult::Available) | Ok(AuthResult::ReservedByYou) => requested_sub_domain,
         Ok(AuthResult::ReservedByYouButDelinquent) | Ok(AuthResult::PaymentRequired) => {
             // note: delinquent payments get a random suffix
-            ServerHello::prefixed_random_domain(&requested_sub_domain)
+            // ServerHello::prefixed_random_domain(&requested_sub_domain)
+            // TODO: create free trial domain
+            tracing::info!(requested_sub_domain=%requested_sub_domain, "payment required");
+            let data = serde_json::to_vec(&ServerHello::AuthFailed).unwrap_or_default();
+            let _ = websocket.send(Message::binary(data)).await;
+            return None;
         }
         Ok(AuthResult::ReservedByOther) => {
             let data = serde_json::to_vec(&ServerHello::SubDomainInUse).unwrap_or_default();

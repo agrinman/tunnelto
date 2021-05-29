@@ -68,6 +68,27 @@ async fn main() {
                     error!("Control error: {:?}. Retrying in 5 seconds.", e);
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 }
+                Error::AuthenticationFailed => {
+                    if config.secret_key.is_none() {
+                        eprintln!(
+                            ">> {}",
+                            "Please use an access key with the `--key` option".yellow()
+                        );
+                        eprintln!(
+                            ">> {}{}",
+                            "You can get your access key here: ".yellow(),
+                            "https://dashboard.tunnelto.dev".yellow().underline()
+                        );
+                    } else {
+                        eprintln!(
+                            ">> {}{}",
+                            "Please check your access key at ".yellow(),
+                            "https://dashboard.tunnelto.dev".yellow().underline()
+                        );
+                    }
+                    eprintln!("\nError: {}", format!("{}", e).red());
+                    return;
+                }
                 _ => {
                     eprintln!("Error: {}", format!("{}", e).red());
                     return;
@@ -92,8 +113,13 @@ async fn run_wormhole(
 ) -> Result<(), Error> {
     let interface = CliInterface::start(config.clone(), introspect.clone());
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let (websocket, sub_domain) = connect_to_wormhole(&config).await?;
-    interface.did_connect(&sub_domain);
+    let Wormhole {
+        websocket,
+        sub_domain,
+        hostname,
+    } = connect_to_wormhole(&config).await?;
+
+    interface.did_connect(&sub_domain, &hostname);
 
     // split reading and writing
     let (mut ws_sink, mut ws_stream) = websocket.split();
@@ -156,9 +182,13 @@ async fn run_wormhole(
     }
 }
 
-async fn connect_to_wormhole(
-    config: &Config,
-) -> Result<(WebSocketStream<MaybeTlsStream<TcpStream>>, String), Error> {
+struct Wormhole {
+    websocket: WebSocketStream<MaybeTlsStream<TcpStream>>,
+    sub_domain: String,
+    hostname: String,
+}
+
+async fn connect_to_wormhole(config: &Config) -> Result<Wormhole, Error> {
     let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
 
     // send our Client Hello message
@@ -196,14 +226,14 @@ async fn connect_to_wormhole(
         Error::ServerReplyInvalid
     })?;
 
-    let sub_domain = match server_hello {
+    let (sub_domain, hostname) = match server_hello {
         ServerHello::Success {
             sub_domain,
             client_id,
-            ..
+            hostname,
         } => {
             info!("Server accepted our connection. I am client_{}", client_id);
-            sub_domain
+            (sub_domain, hostname)
         }
         ServerHello::AuthFailed => {
             return Err(Error::AuthenticationFailed);
@@ -217,7 +247,11 @@ async fn connect_to_wormhole(
         ServerHello::Error(error) => return Err(Error::ServerError(error)),
     };
 
-    Ok((websocket, sub_domain))
+    Ok(Wormhole {
+        websocket,
+        sub_domain,
+        hostname,
+    })
 }
 
 async fn process_control_flow_message(

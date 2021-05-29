@@ -40,6 +40,8 @@ pub struct Config {
 
     /// Connection string for "old timey" database engines
     pub db_connection_string: String,
+    /// The host on which we create tunnels on
+    pub tunnel_host: String,
 }
 
 impl Config {
@@ -78,6 +80,7 @@ impl Config {
             Ok(connection_string) => connection_string,
             _ => "./tunnelto.db".to_string(),
         };
+        let tunnel_host = std::env::var("TUNNEL_HOST").unwrap_or("tunnelto.dev".to_string());
 
         Config {
             allowed_hosts,
@@ -91,6 +94,7 @@ impl Config {
             instance_id,
             blocked_ips,
             db_connection_string,
+            tunnel_host,
         }
     }
 }

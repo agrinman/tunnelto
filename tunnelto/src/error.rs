@@ -5,7 +5,7 @@ pub enum Error {
     #[error("Failed to connect to control server: {0}.")]
     WebSocketError(#[from] tokio_tungstenite::tungstenite::error::Error),
 
-    #[error("Server denied the connection. Please check your authentication key.")]
+    #[error("Server denied the connection.")]
     AuthenticationFailed,
 
     #[error("Server sent a malformed message.")]

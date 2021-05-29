@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +39,10 @@ async fn check_inner() -> Result<Option<Update>, Box<dyn std::error::Error>> {
         .json()
         .await?;
 
-    if update.name.as_str() != CURRENT_VERSION {
+    let cur = semver::Version::from_str(CURRENT_VERSION)?;
+    let remote = semver::Version::from_str(&update.name)?;
+
+    if remote > cur {
         Ok(Some(update))
     } else {
         Ok(None)

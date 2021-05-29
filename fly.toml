@@ -11,6 +11,7 @@ kill_timeout = 5
   NET_PORT = 10002
   BLOCKED_SUB_DOMAINS = "wormhole,dashboard,2,myapp"
   RUST_LOG="tunnelto_server=debug"
+  TUNNEL_HOST = "tunnelto.dev"
 
 [experimental]
   private_network=true
