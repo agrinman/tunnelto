@@ -40,16 +40,14 @@ tracing = "0.1.25"
 tracing-subscriber = "0.2.17"
 tracing-honeycomb = { git = "https://github.com/agrinman/tracing-honeycomb", rev = "687bafa722ccd584f45aa470fbb637bc57c999cd" }
 
-# auth handler
-rusoto_core = "0.46"
-rusoto_dynamodb = "0.46"
-rusoto_credential = "0.46"
-
-[dependencies.rusqlite]
-version = "0.21.0"
-features = ["bundled"]
+# auth handler: dynamodb
+rusoto_core = { version = "0.46", optional = true }
+rusoto_dynamodb = { version = "0.46", optional = true }
+rusoto_credential = { version = "0.46", optional = true }
+# auth handler: sqlite
+rusqlite = { version = "0.21.0", features = ["bundled"], optional = true }
 
 [features]
 default = ["dynamodb"]
-dynamodb = []
-sqlite = []
+dynamodb = ["rusoto_core", "rusoto_dynamodb", "rusoto_credential"]
+sqlite = ["rusqlite"]

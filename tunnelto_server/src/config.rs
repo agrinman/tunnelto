@@ -37,6 +37,9 @@ pub struct Config {
 
     /// Blocked IP addresses
     pub blocked_ips: Vec<IpAddr>,
+
+    /// Connection string for "old timey" database engines
+    pub db_connection_string: String,
 }
 
 impl Config {
@@ -71,6 +74,11 @@ impl Config {
             })
             .unwrap_or(vec![]);
 
+        let db_connection_string = match std::env::var("DB_CONNECTION_STRING") {
+            Ok(connection_string) => connection_string,
+            _ => "./tunnelto.db".to_string(),
+        };
+
         Config {
             allowed_hosts,
             blocked_sub_domains,
@@ -82,6 +90,7 @@ impl Config {
             honeycomb_api_key,
             instance_id,
             blocked_ips,
+            db_connection_string,
         }
     }
 }

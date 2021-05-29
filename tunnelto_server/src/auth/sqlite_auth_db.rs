@@ -1,6 +1,7 @@
 use rusqlite::{params, NO_PARAMS, Connection};
 
 use super::AuthResult;
+use super::super::CONFIG;
 use crate::auth::AuthService;
 use async_trait::async_trait;
 use sha2::Digest;
@@ -8,10 +9,6 @@ use std::str::FromStr;
 use thiserror::Error;
 use uuid::Uuid;
 use std::sync::Mutex;
-
-mod sqlite_conf {
-    pub const DB_PATH:&'static str = "./tunnelto.db";
-}
 
 mod domain_db {
     pub const TABLE_NAME: &'static str = "tunnelto_domains";
@@ -37,7 +34,7 @@ pub struct AuthDbService {
 
 impl AuthDbService {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let conn = Connection::open(sqlite_conf::DB_PATH.to_string())?;
+        let conn = Connection::open(&CONFIG.db_connection_string)?;
         conn.execute(
             &format!("CREATE TABLE IF NOT EXISTS {}  (
                     {} TEXT NOT NULL,

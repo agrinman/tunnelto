@@ -81,7 +81,7 @@ pub struct NoAuth;
 #[async_trait]
 impl AuthService for NoAuth {
     type Error = ();
-    type AuthKey = ();
+    type AuthKey = String;
 
     /// Authenticate a subdomain with an AuthKey
     async fn auth_sub_domain(
