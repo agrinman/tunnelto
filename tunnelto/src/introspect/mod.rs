@@ -7,7 +7,7 @@ use bytes::Buf;
 use futures::{Stream, StreamExt};
 use hyper::body::HttpBody;
 use hyper::client::HttpConnector;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use uuid::Uuid;
@@ -79,7 +79,7 @@ pub fn start_introspection_server(config: Config) -> IntrospectionAddrs {
     let local_addr = config.forward_url();
     let local_ws_addr = config.ws_forward_url();
 
-    let https = hyper_tls::HttpsConnector::new();
+    let https = hyper_rustls::HttpsConnector::with_native_roots();
     let http_client = hyper::Client::builder().build::<_, hyper::Body>(https);
 
     let get_client = move || {
