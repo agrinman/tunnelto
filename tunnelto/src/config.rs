@@ -9,7 +9,7 @@ const DEFAULT_HOST: &'static str = "tunnelto.dev";
 const DEFAULT_CONTROL_HOST: &'static str = "wormhole.tunnelto.dev";
 const DEFAULT_CONTROL_PORT: &'static str = "443";
 
-const SETTINGS_DIR: &'static str = ".tunnelto";
+const APP_DIR_NAME: &'static str = "tunnelto";
 const SECRET_KEY_FILE: &'static str = "key.token";
 
 /// Command line arguments
@@ -94,15 +94,15 @@ impl Config {
         let (secret_key, sub_domain) = match opts.command {
             Some(SubCommand::SetAuth { key }) => {
                 let key = opts.key.unwrap_or(key);
-                let settings_dir = match dirs::home_dir().map(|h| h.join(SETTINGS_DIR)) {
+                let data_dir = match dirs::data_dir().map(|h| h.join(APP_DIR_NAME)) {
                     Some(path) => path,
                     None => {
                         panic!("Could not find home directory to store token.")
                     }
                 };
-                std::fs::create_dir_all(&settings_dir)
+                std::fs::create_dir_all(&data_dir)
                     .expect("Fail to create file in home directory");
-                std::fs::write(settings_dir.join(SECRET_KEY_FILE), key)
+                std::fs::write(data_dir.join(SECRET_KEY_FILE), key)
                     .expect("Failed to save authentication key file.");
 
                 eprintln!("Authentication key stored successfully!");
@@ -114,8 +114,8 @@ impl Config {
                 (
                     match key {
                         Some(key) => Some(key),
-                        None => dirs::home_dir()
-                            .map(|h| h.join(SETTINGS_DIR).join(SECRET_KEY_FILE))
+                        None => dirs::data_dir()
+                            .map(|h| h.join(APP_DIR_NAME).join(SECRET_KEY_FILE))
                             .map(|path| {
                                 if path.exists() {
                                     std::fs::read_to_string(path)
