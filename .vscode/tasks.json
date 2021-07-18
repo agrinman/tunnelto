@@ -35,6 +35,18 @@
 				"$rustc"
 			],
 			"label": "Run client"
+		},
+		{
+			"type": "cargo",
+			"command": "run",
+			"args": [
+				"--bin tunnelto_server"
+			],
+			"env": {},
+			"problemMatcher": [
+				"$rustc"
+			],
+			"label": "Run Server"
 		}
 	]
 }
