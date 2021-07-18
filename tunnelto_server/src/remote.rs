@@ -228,6 +228,8 @@ async fn peek_http_request_host(mut socket: TcpStream) -> Option<StreamWithPeeke
         .map(|h| std::str::from_utf8(h.value))
         .next()
     {
+        tracing::info!(host=%host, path=%req.path.unwrap_or_default(), "peek request");
+
         return Some(StreamWithPeekedHost {
             socket,
             host: host.to_string(),
