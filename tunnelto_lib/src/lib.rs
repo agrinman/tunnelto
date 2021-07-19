@@ -120,7 +120,6 @@ impl ClientId {
 pub struct StreamId([u8; 8]);
 
 impl StreamId {
-    #[allow(unused)]
     pub fn generate() -> StreamId {
         let mut id = [0u8; 8];
         rand::thread_rng().fill_bytes(&mut id);
