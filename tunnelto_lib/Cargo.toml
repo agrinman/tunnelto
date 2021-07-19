@@ -1,7 +1,7 @@
 [package]
 name = "tunnelto_lib"
 description = "expose your local web server to the internet with a public url"
-version = "0.1.17"
+version = "0.1.19"
 authors = ["Alex Grinman <alex@tunnelto.dev>"]
 edition = "2018"
 license = "MIT"
