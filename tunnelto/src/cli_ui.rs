@@ -1,4 +1,5 @@
-use crate::introspect::IntrospectionAddrs;
+use std::net::SocketAddr;
+
 use crate::Config;
 use cli_table::format::Padding;
 use cli_table::{format::Justify, print_stderr, Cell, Table};
@@ -8,10 +9,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 pub struct CliInterface {
     spinner: ProgressBar,
     config: Config,
-    introspect: IntrospectionAddrs,
+    introspect: SocketAddr,
 }
 impl CliInterface {
-    pub fn start(config: Config, introspect: IntrospectionAddrs) -> Self {
+    pub fn start(config: Config, introspect: SocketAddr) -> Self {
         let spinner = new_spinner("Opening remote tunnel...");
         Self {
             spinner,
@@ -46,10 +47,7 @@ impl CliInterface {
 
         let public_url = self.config.activation_url(&full_hostname).bold().green();
         let forward_url = self.config.forward_url();
-        let inspect = format!(
-            "http://localhost:{}",
-            self.introspect.web_explorer_address.port()
-        );
+        let inspect = format!("http://localhost:{}", self.introspect.port());
 
         let table = vec![
             vec![

@@ -44,10 +44,10 @@
                     {% endif %}
                 </td>
                 <td class="is-narrow is-family-code is-uppercase">
-                    <span class="has-text-weight-bold">{{request.method}}</span>
+                    <span class="has-text-weight-bold">{{request.method.clone().unwrap_or_default()}}</span>
                 </td>
                 <td>
-                    <span class="is-family-code">{{request.path_and_query()}}</span>
+                    <span class="is-family-code">{{request.path.clone().unwrap_or_default()}}</span>
                 </td>
                 <td class="is-narrow">
                     <span class="">{{request.body_data.len()/1024}} KB</span>

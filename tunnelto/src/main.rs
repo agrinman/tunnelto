@@ -10,6 +10,7 @@ pub use log::{debug, error, info, warn};
 
 use std::collections::HashMap;
 use std::env;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 mod cli_ui;
@@ -24,7 +25,6 @@ pub use config::*;
 pub use tunnelto_lib::*;
 
 use crate::cli_ui::CliInterface;
-use crate::introspect::IntrospectionAddrs;
 use colored::Colorize;
 use futures::future::Either;
 use std::time::Duration;
@@ -45,20 +45,20 @@ pub enum StreamMessage {
 
 #[tokio::main]
 async fn main() {
-    setup_panic!();
-
     let mut config = match Config::get() {
         Ok(config) => config,
         Err(_) => return,
     };
 
+    setup_panic!();
+
     update::check().await;
 
-    let introspect_addrs = introspect::start_introspection_server(config.clone());
+    let introspect_dash_addr = introspect::start_introspect_web_dashboard(config.clone());
 
     loop {
         let (restart_tx, mut restart_rx) = unbounded();
-        let wormhole = run_wormhole(config.clone(), introspect_addrs.clone(), restart_tx);
+        let wormhole = run_wormhole(config.clone(), introspect_dash_addr.clone(), restart_tx);
         let result = futures::future::select(Box::pin(wormhole), restart_rx.next()).await;
         config.first_run = false;
 
@@ -108,10 +108,10 @@ async fn main() {
 /// Setup the tunnel to our control server
 async fn run_wormhole(
     config: Config,
-    introspect: IntrospectionAddrs,
+    introspect_web_addr: SocketAddr,
     mut restart_tx: UnboundedSender<Option<Error>>,
 ) -> Result<(), Error> {
-    let interface = CliInterface::start(config.clone(), introspect.clone());
+    let interface = CliInterface::start(config.clone(), introspect_web_addr);
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     let Wormhole {
         websocket,
@@ -159,7 +159,7 @@ async fn run_wormhole(
             }
             Some(Ok(message)) => {
                 let packet = process_control_flow_message(
-                    &introspect,
+                    config.clone(),
                     tunnel_tx.clone(),
                     message.into_data(),
                 )
@@ -255,7 +255,7 @@ async fn connect_to_wormhole(config: &Config) -> Result<Wormhole, Error> {
 }
 
 async fn process_control_flow_message(
-    introspect: &IntrospectionAddrs,
+    config: Config,
     mut tunnel_tx: UnboundedSender<ControlPacket>,
     payload: Vec<u8>,
 ) -> Result<ControlPacket, Box<dyn std::error::Error>> {
@@ -299,12 +299,12 @@ async fn process_control_flow_message(
             );
 
             if !ACTIVE_STREAMS.read().unwrap().contains_key(&stream_id) {
-                local::setup_new_stream(
-                    introspect.forward_address.port(),
-                    tunnel_tx.clone(),
-                    stream_id.clone(),
-                )
-                .await;
+                if local::setup_new_stream(config.clone(), tunnel_tx.clone(), stream_id.clone())
+                    .await
+                    .is_none()
+                {
+                    error!("failed to open local tunnel")
+                }
             }
 
             // find the right stream

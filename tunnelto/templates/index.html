@@ -24,7 +24,7 @@
             </thead>
             <tbody>
             {% for r in requests %}
-            <tr class="is-family-code">
+            <tr class="is-family-code" onclick="window.location=window.location.origin + '/detail/{{r.id}}';">
                 <td class="is-narrow is-family-code">
                     <a class="is-link is-info" href="/detail/{{r.id}}">
                         <span class="has-text-weight-light">{{r.completed.format("%H:%M:%S")}}</span>
@@ -47,10 +47,10 @@
                     {% endif %}
                 </td>
                 <td class="is-narrow is-family-code is-uppercase">
-                    <span class="has-text-weight-bold">{{r.method}}</span>
+                    <span class="has-text-weight-bold">{{r.method.clone().unwrap_or_default()}}</span>
                 </td>
                 <td>
-                    <span class="is-family-code">{{r.path_and_query()}}</span>
+                    <span class="is-family-code">{{r.path.clone().unwrap_or_default()}}</span>
                 </td>
                 <td class="is-narrow">
                     <span class="">{{r.body_data.len()/1024}} KB</span>

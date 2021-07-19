@@ -2597,11 +2597,13 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tokio-tungstenite 0.14.0",
  "tungstenite 0.13.0",
  "tunnelto_lib",
  "uuid",
  "warp",
+ "webpki-roots",
 ]
 
 [[package]]

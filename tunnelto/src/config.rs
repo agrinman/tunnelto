@@ -1,3 +1,5 @@
+use std::net::{SocketAddr, ToSocketAddrs};
+
 use super::*;
 use structopt::StructOpt;
 
@@ -39,9 +41,9 @@ struct Opts {
     #[structopt(long = "host", default_value = "localhost")]
     local_host: String,
 
-    /// Sets the SCHEME (i.e. http or https) to forward incoming tunnel traffic to
-    #[structopt(long = "scheme", default_value = "http")]
-    scheme: String,
+    /// Sets the protocol for local forwarding (i.e. https://localhost) to forward incoming tunnel traffic to
+    #[structopt(long = "use-tls", short = "t")]
+    use_tls: bool,
 
     /// Sets the port to forward incoming tunnel traffic to on the target host
     #[structopt(short = "p", long = "port", default_value = "8000")]
@@ -67,13 +69,14 @@ enum SubCommand {
 pub struct Config {
     pub client_id: ClientId,
     pub control_url: String,
-    pub local_host: String,
-    pub scheme: String,
+    pub use_tls: bool,
     pub host: String,
+    pub local_host: String,
     pub local_port: u16,
+    pub local_addr: SocketAddr,
     pub sub_domain: Option<String>,
     pub secret_key: Option<SecretKey>,
-    pub tls_off: bool,
+    pub control_tls_off: bool,
     pub first_run: bool,
     pub dashboard_port: u16,
     pub verbose: bool,
@@ -134,6 +137,22 @@ impl Config {
             }
         };
 
+        let local_addr = match (opts.local_host.as_str(), opts.port)
+            .to_socket_addrs()
+            .unwrap_or(vec![].into_iter())
+            .next()
+        {
+            Some(addr) => addr,
+            None => {
+                error!(
+                    "An invalid local address was specified: {}:{}",
+                    opts.local_host.as_str(),
+                    opts.port
+                );
+                return Err(());
+            }
+        };
+
         // get the host url
         let tls_off = env::var(TLS_OFF_ENV).is_ok();
         let host = env::var(HOST_ENV).unwrap_or(format!("{}", DEFAULT_HOST));
@@ -150,15 +169,16 @@ impl Config {
         Ok(Config {
             client_id: ClientId::generate(),
             local_host: opts.local_host,
-            scheme: opts.scheme,
+            use_tls: opts.use_tls,
             control_url,
             host,
             local_port: opts.port,
+            local_addr,
             sub_domain,
             dashboard_port: opts.dashboard_port.unwrap_or(0),
             verbose: opts.verbose,
             secret_key: secret_key.map(|s| SecretKey(s)),
-            tls_off,
+            control_tls_off: tls_off,
             first_run: true,
         })
     }
@@ -166,19 +186,21 @@ impl Config {
     pub fn activation_url(&self, full_hostname: &str) -> String {
         format!(
             "{}://{}",
-            if self.tls_off { "http" } else { "https" },
+            if self.control_tls_off {
+                "http"
+            } else {
+                "https"
+            },
             full_hostname
         )
     }
 
     pub fn forward_url(&self) -> String {
-        format!(
-            "{}://{}:{}",
-            &self.scheme, &self.local_host, &self.local_port
-        )
+        let scheme = if self.use_tls { "https" } else { "http" };
+        format!("{}://{}:{}", &scheme, &self.local_host, &self.local_port)
     }
     pub fn ws_forward_url(&self) -> String {
-        let ws_scheme = if &self.scheme == "https" { "wss" } else { "ws" };
-        format!("{}://{}:{}", ws_scheme, &self.local_host, &self.local_port)
+        let scheme = if self.use_tls { "wss" } else { "ws" };
+        format!("{}://{}:{}", scheme, &self.local_host, &self.local_port)
     }
 }

@@ -11,7 +11,7 @@
     <ul>
         <li data-tab="1" class="is-active">
             <a>
-                <span>Text</span>
+                <span>Raw</span>
             </a>
         </li>
         {% match body.data_type %}
@@ -30,11 +30,7 @@
         <pre class="" style="overflow-x: scroll;">{{ body.raw }}</pre>
     </div>
     <div style="overflow-x: scroll" class=" px-4 py-4 has-background-dark with-radius-bottom has-text-white-ter is-family-code" data-content="2">
-        {% match body.content %}
-        {% when Some with (contents) %}
-        {{ contents|linebreaks|safe }}
-        {% when None %}
-        {% endmatch %}
+        <pre class="" style="overflow-x: scroll;">{{ body.raw }}</pre>
     </div>
 </div>
 

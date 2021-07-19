@@ -19,6 +19,7 @@ futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio-tungstenite = { version = "0.14", features = ["rustls-tls"]}
+tokio-rustls = "0.22"
 tungstenite = { version = "0.13", default-features = false, features = ["rustls-tls"]}
 lazy_static = "1.4.0"
 pretty_env_logger = "0.4.0"
@@ -42,3 +43,4 @@ serde_urlencoded = "0.6.1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 cli-table = "0.4"
 semver = "0.11"
+webpki-roots = "0.21"
