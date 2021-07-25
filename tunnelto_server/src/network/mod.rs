@@ -60,11 +60,16 @@ impl Instance {
         let client = reqwest::Client::new();
         let response = client
             .get(url)
+            .timeout(std::time::Duration::from_secs(2))
             .query(&HostQuery {
                 host: host.to_string(),
             })
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!(error=?e, "failed to send a host query");
+                e
+            })?;
         let status = response.status();
         let result: HostQueryResponse = response.json().await?;
 

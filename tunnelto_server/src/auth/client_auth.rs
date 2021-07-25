@@ -100,6 +100,8 @@ async fn auth_client(
         },
     };
 
+    tracing::info!(requested_sub_domain=%requested_sub_domain, "will auth sub domain");
+
     // next authenticate the sub-domain
     let sub_domain = match crate::AUTH_DB_SERVICE
         .auth_sub_domain(&auth_key.0, &requested_sub_domain)
@@ -127,6 +129,8 @@ async fn auth_client(
             return None;
         }
     };
+
+    tracing::info!(subdomain=%sub_domain, "did auth sub_domain");
 
     Some((
         websocket,
