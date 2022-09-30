@@ -23,7 +23,7 @@ tokio-rustls = "0.22"
 tungstenite = { version = "0.13", default-features = false, features = ["rustls-tls"]}
 lazy_static = "1.4.0"
 pretty_env_logger = "0.4.0"
-dirs = "2.0.2"
+dirs = "3.0"
 log = "0.4.8"
 human-panic = "1.0.3"
 structopt = "0.3.12"
