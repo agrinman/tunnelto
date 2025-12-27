@@ -19,6 +19,7 @@ mod error;
 mod introspect;
 mod local;
 mod update;
+mod ws;
 pub use self::error::*;
 
 pub use config::*;
@@ -189,7 +190,7 @@ struct Wormhole {
 }
 
 async fn connect_to_wormhole(config: &Config) -> Result<Wormhole, Error> {
-    let (mut websocket, _) = tokio_tungstenite::connect_async(&config.control_url).await?;
+    let (mut websocket, _) = ws::connect_async_force_rustls(config.control_url.as_str()).await?;
 
     // send our Client Hello message
     let client_hello = match config.secret_key.clone() {

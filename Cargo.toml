@@ -12,3 +12,8 @@ exclude = [
 
 [profile.dev]
 split-debuginfo = "unpacked"
+
+[patch.crates-io]
+# Rust 1.91 rejects taking references to packed fields; ntapi 0.3.6 still does this.
+# Vendoring a tiny patch keeps the dependency graph stable while restoring Windows builds.
+ntapi = { path = "vendor/ntapi" }
