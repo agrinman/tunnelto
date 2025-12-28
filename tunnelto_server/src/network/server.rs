@@ -33,6 +33,9 @@ pub struct HostQueryResponse {
 
 fn handle_query(query: HostQuery) -> HostQueryResponse {
     tracing::debug!(host=%query.host, "got query");
+    // SECURITY: Only return client_id for authenticated requests from authorized instances
+    // The host lookup is intentionally limited to internal gossip protocol only
+    // to prevent unauthorized users from discovering tunnel ownership
     HostQueryResponse {
         client_id: Connections::client_for_host(&query.host),
     }

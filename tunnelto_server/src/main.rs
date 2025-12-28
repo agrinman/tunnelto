@@ -101,6 +101,11 @@ async fn main() {
     let listen_addr = format!("[::]:{}", CONFIG.remote_port);
     info!("listening on: {}", &listen_addr);
 
+    // SECURITY: This tunnel server is designed to be deployed behind a reverse proxy
+    // (e.g., Caddy, Nginx, HAProxy) that handles TLS/HTTPS termination.
+    // Tunnel traffic MUST be encrypted end-to-end through TLS.
+    // Direct exposure of this port without a TLS-terminating reverse proxy is insecure.
+    
     // create our accept any server
     let listener = TcpListener::bind(listen_addr)
         .await

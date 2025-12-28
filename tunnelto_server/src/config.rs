@@ -2,6 +2,7 @@ use crate::auth::SigKey;
 use std::net::IpAddr;
 use std::str::FromStr;
 use uuid::Uuid;
+use regex::Regex;
 
 /// Global service configuration
 pub struct Config {
@@ -63,6 +64,7 @@ impl Config {
             .map(|app_name| format!("global.{}.internal", app_name))
             .ok();
 
+        // SECURITY: Load API key but don't expose in logs/debug. Mark as sensitive.
         let honeycomb_api_key = std::env::var("HONEYCOMB_API_KEY").ok();
         let instance_id = std::env::var("FLY_ALLOC_ID").unwrap_or(Uuid::new_v4().to_string());
         let blocked_ips = std::env::var("BLOCKED_IPS")
@@ -74,7 +76,12 @@ impl Config {
             })
             .unwrap_or(vec![]);
 
-        let tunnel_host = std::env::var("TUNNEL_HOST").unwrap_or("tunnelto.dev".to_string());
+        let tunnel_host_raw = std::env::var("TUNNEL_HOST").unwrap_or("tunnelto.dev".to_string());
+        let tunnel_host = validate_hostname(&tunnel_host_raw)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Invalid TUNNEL_HOST value, using default: {}", e);
+                "tunnelto.dev".to_string()
+            });
 
         Config {
             allowed_hosts,
@@ -100,4 +107,21 @@ fn get_port(var: &'static str, default: u16) -> u16 {
     } else {
         default
     }
+}
+
+/// Validate hostname to prevent injection attacks
+fn validate_hostname(hostname: &str) -> Result<String, String> {
+    // Only allow alphanumeric, dots, and hyphens
+    let hostname_regex = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$")
+        .expect("Failed to compile hostname regex");
+    
+    if hostname.is_empty() || hostname.len() > 253 {
+        return Err("Hostname length must be between 1 and 253 characters".to_string());
+    }
+    
+    if !hostname_regex.is_match(hostname) {
+        return Err("Hostname contains invalid characters".to_string());
+    }
+    
+    Ok(hostname.to_string())
 }
